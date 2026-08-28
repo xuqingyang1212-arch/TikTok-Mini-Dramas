@@ -212,7 +212,6 @@ pnpm dev
 ## 文档
 
 - [小程序 API 文档](admin-Base/docs/mini-api.md)
-- [IAA 进度与设计说明](admin-Base/docs/iaa-progress-and-design.md)
 - [后台架构说明](admin-Base/ARCHITECTURE.md)
 - [数据库初始化策略](admin-Base/backend/migrations/README.md)
 
