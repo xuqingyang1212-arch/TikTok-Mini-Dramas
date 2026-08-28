@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+/* Custom animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes barPulse {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.6); }
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+.animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.animate-pulse { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+.delay-75 { animation-delay: 75ms; }
+.delay-150 { animation-delay: 150ms; }
+
+/* Hide scrollbar */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Safe area insets */
+.safe-area-top { padding-top: env(safe-area-inset-top, 0); }
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+
+/* Android browser toolbars can overlay visualViewport instead of resizing it. */
+.android-player-viewport {
+  height: 100vh;
+}
+
+@supports (height: 100svh) {
+  .android-player-viewport {
+    height: 100svh;
+  }
+}
+
+/* Prevent pull-to-refresh */
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Touch feedback */
+.touch-active:active {
+  opacity: 0.7;
+  transform: scale(0.98);
+}
+
+/* Video player transition */
+.video-transition-enter {
+  transform: translateY(100%);
+}
+.video-transition-enter-active {
+  transform: translateY(0);
+  transition: transform 0.3s ease-out;
+}
+.video-transition-exit {
+  transform: translateY(0);
+}
+.video-transition-exit-active {
+  transform: translateY(-100%);
+  transition: transform 0.3s ease-out;
+}
+
+/* ============================================================
+   Payment sheet (paywall) — premium dark glass style
+   ============================================================ */
+
+/* Full-screen overlay inside the player container */
+.payment-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Bottom sheet container */
+.payment-sheet {
+  position: relative;
+  width: 100%;
+  max-height: 88vh;
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  /* Deep black / purple / blue gradient with glass feel */
+  background:
+    radial-gradient(120% 90% at 15% 0%, rgba(74, 44, 96, 0.55) 0%, rgba(0, 0, 0, 0) 55%),
+    radial-gradient(120% 90% at 100% 5%, rgba(36, 52, 104, 0.5) 0%, rgba(0, 0, 0, 0) 55%),
+    linear-gradient(180deg, #191622 0%, #131019 60%, #0d0b12 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+/* Keep large tier lists compact; only the options area scrolls. */
+.payment-sheet--select {
+  display: flex;
+  max-height: min(78vh, 680px);
+  flex-direction: column;
+}
+
+@supports (height: 100svh) {
+  .payment-sheet--select {
+    max-height: min(78svh, 680px);
+  }
+}
+
+/* ---------- Beans card ---------- */
+.beans-card {
+  isolation: isolate;
+  background:
+    linear-gradient(160deg, rgba(60, 58, 78, 0.55) 0%, rgba(28, 26, 38, 0.85) 45%, rgba(20, 18, 26, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 14px rgba(0, 0, 0, 0.3);
+}
+/* gradient edge accent */
+.beans-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(150deg, rgba(255, 190, 120, 0.5), rgba(255, 255, 255, 0) 40%, rgba(150, 170, 255, 0.35) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.7;
+}
+/* top-left reflection */
+.beans-card__sheen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 55%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+}
+/* faint star sparkles */
+.beans-card__stars {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 18% 70%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1px 1px at 80% 30%, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(1.4px 1.4px at 62% 82%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 32% 22%, rgba(255, 255, 255, 0.35), transparent);
+  opacity: 0.6;
+}
+/* bottom light line */
+.beans-card::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 210, 150, 0.45), transparent);
+  pointer-events: none;
+}
+
+/* ---------- VIP cards ---------- */
+.vip-card {
+  isolation: isolate;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.vip-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 42%);
+  pointer-events: none;
+}
+/* gold / recommended */
+.vip-card--gold {
+  background: linear-gradient(100deg, #ff9a3d 0%, #ff6a3d 48%, #f0374f 100%);
+}
+.vip-card--recommended {
+  border: 1px solid rgba(255, 226, 150, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(255, 210, 130, 0.25),
+    0 8px 22px rgba(240, 90, 60, 0.4);
+}
+/* purple */
+.vip-card--purple {
+  background: linear-gradient(100deg, #4a2f74 0%, #3a2a5c 55%, #2a2447 100%);
+  border: 1px solid rgba(180, 140, 255, 0.22);
+}
+/* blue */
+.vip-card--blue {
+  background: linear-gradient(100deg, #223a6b 0%, #1f2f57 55%, #1b2545 100%);
+  border: 1px solid rgba(130, 170, 255, 0.22);
+}
+/* rose / half-year */
+.vip-card--rose {
+  background: linear-gradient(100deg, #64243e 0%, #4e2036 55%, #351a2b 100%);
+  border: 1px solid rgba(255, 128, 170, 0.25);
+}
+/* teal */
+.vip-card--teal {
+  background: linear-gradient(100deg, #174f50 0%, #173f43 55%, #142f35 100%);
+  border: 1px solid rgba(93, 225, 205, 0.25);
+}
+.profile-vip-card--inactive {
+  isolation: isolate;
+  background: linear-gradient(100deg, #302442 0%, #251f35 55%, #1b1925 100%);
+  border: 1px solid rgba(180, 140, 255, 0.2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.profile-vip-card--inactive::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 42%);
+  pointer-events: none;
+}

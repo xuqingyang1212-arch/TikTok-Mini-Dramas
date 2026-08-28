@@ -1,0 +1,57 @@
+server:
+  port: 8080
+  mode: debug # debug | release
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: ""
+  dbname: tiktok_mini_drama
+  charset: utf8mb4
+  max_idle_conns: 10
+  max_open_conns: 100
+
+jwt:
+  secret: "change-me-to-a-random-string"
+  expire_hours: 24
+
+# ============================================================
+# 演示模式配置 (Demo Mode)
+# ============================================================
+# 本项目为演示项目，不对接 TikTok 官方接口。
+# demo.enabled = true 时：
+#   - 小程序登录：跳过 TikTok OAuth，直接用 device_id 自动创建/登录用户
+#   - 充值支付：跳过支付网关校验，直接到账
+#   - 视频播放：不校验 CDN 签名，直接返回本地/OSS 地址
+#   - 短信/邮件：不真实发送，控制台打印
+# ============================================================
+demo:
+  enabled: true
+  # 演示用户默认充值金币数量（首次登录赠送）
+  default_coins: 1000
+  # 自动登录：小程序端传 device_id 即可登录，无需 TikTok 授权码
+  auto_login: true
+  # 支付自动成功：充值请求直接标记为成功，不走第三方支付回调
+  auto_payment: true
+  # 固定验证码（后台登录用，与脚手架保持一致）
+  fixed_verify_code: "123456"
+
+# ============================================================
+# 存储配置 (演示模式下使用本地存储)
+# ============================================================
+storage:
+  # local | oss | s3
+  type: local
+  local:
+    # 上传文件存储目录（相对于后端工作目录）
+    upload_dir: "./uploads"
+    # 访问 URL 前缀
+    base_url: "http://127.0.0.1:8080/static"
+  # 以下为正式环境配置（演示模式不使用）
+  oss:
+    endpoint: ""
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    base_url: ""

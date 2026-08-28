@@ -1,0 +1,36 @@
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+.vercel/
+next.user-config.*
+
+# Environment variables
+.env*.local
+
+# Common ignores
+node_modules
+.next/
+.DS_Store
+.vercel
+
+# IDE (ignore local cursor artifacts but keep shared rules)
+.cursor/*
+!.cursor/rules/
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
+# Backend build artifacts
+backend/server
+backend/server.exe
+backend/scaffold-admin
+*.exe
+
+# Backend runtime data
+backend/data/
+
+# Backend config (contains secrets)
+backend/config.yaml

@@ -1,0 +1,46 @@
+# ==== Dependencies ====
+node_modules/
+**/node_modules/
+
+# ==== Next.js build output ====
+.next/
+**/.next/
+out/
+**/out/
+
+# ==== TypeScript build cache ====
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ==== Environment variables ====
+.env
+.env*.local
+
+# ==== OS / IDE ====
+.DS_Store
+**/.DS_Store
+.vercel
+.cursor/*
+!.cursor/rules/
+
+# ==== v0 sandbox internal files ====
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+next.user-config.*
+
+# ==== Backend (Go) build artifacts ====
+admin-Base/backend/server
+admin-Base/backend/server.exe
+admin-Base/backend/scaffold-admin
+*.exe
+
+# ==== Backend runtime / logs / data ====
+admin-Base/backend/data/
+admin-Base/backend/uploads/
+**/*.log
+
+# ==== Backend config (contains secrets) ====
+admin-Base/backend/config.yaml

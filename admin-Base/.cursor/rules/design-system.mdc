@@ -1,0 +1,614 @@
+---
+description: 漫剧管理后台 - 全局设计规范与编码规则。所有新增/修改页面必须遵守。
+alwaysApply: true
+---
+
+# 漫剧管理后台 设计规范
+
+## 一、技术栈
+
+- Next.js 16 (App Router, Turbopack) + React 19 + TypeScript (strict)
+- Tailwind CSS 4 + tw-animate-css，PostCSS 经由 `@tailwindcss/postcss`
+- shadcn/ui (new-york 风格, neutral 基色, Lucide 图标)
+- 路径别名 `@/*` → 项目根目录
+- 工具函数 `cn()` = `twMerge(clsx(...))`，位于 `@/lib/utils`
+
+## 二、颜色体系
+
+采用 oklch 色值，通过 CSS 变量实现明暗主题切换。业务代码中直接使用 HEX 硬编码。
+
+### 品牌 / 功能色
+| 用途 | 色值 | Tailwind 写法 |
+|------|------|--------------|
+| 品牌主色 / 主要操作 | `#38c08f` | `bg-[#38c08f]` `text-[#38c08f]` |
+| 品牌主色 hover | `#2da87a` | `hover:bg-[#2da87a]` |
+| 品牌浅底（选中态/成功底） | `#edfaf4` | `bg-[#edfaf4]` |
+| 成功底色 | `#ecfdf5` / `#f0fdf4` | `bg-[#ecfdf5]` |
+| 成功文字 | `#059669` | `text-[#059669]` |
+| 危险/删除 | `#dc2626` / `#f04438` | `text-[#dc2626]` |
+| 危险 hover | `#b91c1c` / `#d03025` | `hover:bg-[#b91c1c]` |
+| 危险浅底 | `#fef2f2` | `bg-[#fef2f2]` |
+| 警告底色 | `#fffbeb` / `#fff7ed` | `bg-[#fffbeb]` |
+| 警告文字 | `#d97706` / `#ea580c` | `text-[#d97706]` |
+| 信息/进行中底色 | `#eff6ff` | `bg-[#eff6ff]` |
+| 信息/进行中文字 | `#2563eb` | `text-[#2563eb]` |
+| 上传进度条 | `#60a5fa` | `bg-[#60a5fa]` |
+
+### 中性灰度
+| 用途 | 色值 |
+|------|------|
+| 标题/正文强调 | `#111827` / `#1a1a1a` |
+| 正文主色 | `#374151` |
+| 正文次色 | `#4b5563` |
+| 辅助/placeholder | `#6b7280` |
+| 禁用/图标 | `#9ca3af` |
+| 弱提示 | `#c4c9d4` |
+| 边框 | `#d1d5db`（控件） / `#e5e7eb`（分割线/卡片） / `#f3f4f6`（行分隔） |
+| 背景层级 | `#f9fafb` → `#f5f6f7` → `#f6f7f9`（最外层） |
+
+## 三、字号规范
+
+所有字号使用 `text-[Xpx]` 精确控制，不使用 Tailwind 语义字号类。
+
+| 场景 | 字号 |
+|------|------|
+| 版本号/极小提示 | `text-[11px]` |
+| 状态标签/上传提示 | `text-[11.5px]` |
+| 分页/表头/总数 | `text-[12px]` / `text-[12.5px]` |
+| 正文/筛选/表格/按钮 | `text-[13px]` |
+| 侧边栏一级菜单 | `text-[13.5px]` |
+| 侧边栏二级菜单 | `text-[13px]` |
+| 弹窗标题 | `text-[15px] font-semibold` |
+| 系统名称 | `text-[15px] font-semibold tracking-wide` |
+
+## 四、间距与圆角
+
+### 圆角
+| 场景 | 值 |
+|------|-----|
+| 状态标签/分页按钮 | `rounded-[4px]` |
+| 输入框/按钮/下拉/缩略图 | `rounded-[6px]` |
+| 卡片/弹窗/浮层 | `rounded-[8px]` 或 `rounded-lg` |
+| 确认弹窗 | `rounded-[10px]` |
+
+### 常用间距
+- 页面外层 padding: `p-5`
+- 卡片内 padding：
+  - 筛选区：`px-5 py-4`，底部 `border-b border-[#e5e7eb]` 承担与下方内容的视觉分隔
+  - 工具栏（可选，带新增/导出按钮）：`px-5 py-3`，上下对称 padding，本身就是筛选区与表格之间的"喘息空间"
+  - **表格区：一律使用统一组件 `FixedHeaderTable`（`components/shared/fixed-header-table.tsx`），不加任何 `px-*` / `py-*` / `mt-*`**（组件内部已处理固定表头、横向滚动同步与触控板回弹，禁止再手写 sticky thead / `translateZ` 方案）
+    - 左右不加 padding：保证表头/行 `border-b` 贯穿到卡片左右两侧（水平间距由 `<th>/<td>` 自身的 `px-4` 提供）
+    - 顶部不加 margin：**无工具栏时表格表头 `bg-[#f9fafb]` 直接紧贴筛选区 `border-b`，不留白色间隙**；有工具栏时由工具栏自身 `py-3` 提供间距
+  - 分页区：`border-t border-[#e5e7eb]`（高度由 `ListPagination` 自行控制）
+- 表格 cell padding: `px-4 py-3`
+- 按钮内 padding: `px-4 py-1.5`（标准）/ `px-3.5 py-1.5`（紧凑）
+- 元素间距: `gap-2` ~ `gap-3`
+- 卡片内部区块分隔：`border-b border-[#e5e7eb]`（筛选区底部）/ `border-t border-[#e5e7eb]`（分页区顶部）
+
+## 五、布局结构
+
+### 全局骨架
+```
+flex h-screen overflow-hidden bg-[#f6f7f9]
+├── Sidebar (w-[240px], bg-white, border-r)
+│   ├── Logo区 (h-[52px], border-b)
+│   ├── 导航菜单 (flex-1, overflow-y-auto)
+│   └── Footer (border-t, 版本号)
+└── 右侧区域 (flex-1 flex-col)
+    ├── Header (h-[52px], border-b, bg-white)
+    └── ContentArea (flex-1 p-5)
+        ├── Breadcrumb (mb-4)
+        └── 业务内容 (flex-1 min-h-0)
+```
+
+### 业务页面标准结构（列表页）
+
+**硬性约束：整页使用一个大卡片（"单卡片一体化"），不允许把筛选区和列表区拆成两个独立卡片。各区块之间用 `border-b` / `border-t` 分隔，不使用 `gap` 间距。**
+
+```tsx
+<div className="flex flex-1 min-h-0 flex-col rounded-lg border border-[#e5e7eb] bg-white">
+  {/* 筛选区：统一使用 FilterBar 组件（等宽网格，行列自动对齐）。
+      字段一律传 block；查询/重置/导出等按钮放进 actions 插槽（组件内右对齐）。
+      禁止再手写 flex-wrap 筛选栏。 */}
+  <FilterBar
+    actions={
+      <>
+        <button className="...主按钮">查询</button>
+        <button className="...次按钮">重置</button>
+      </>
+    }
+  >
+    <FilterInput block ... />
+    <SelectFilter block ... />
+  </FilterBar>
+
+  {/* 工具栏（可选）：仅在有"新增"/"导出"等顶部操作时出现；无操作时整块省略，不保留空行。
+      py-3 上下对称，本身就是筛选区与表格之间的间距 */}
+  <div className="flex shrink-0 items-center px-5 py-3">
+    <button className="...主按钮">+ 新增</button>
+  </div>
+
+  {/* 表格区：一律使用统一组件 FixedHeaderTable（不加任何 px/py/mt）。
+      columns 传每列宽度 class（表头/表体共享，锁定列宽）；
+      header 传一组 <th className={thClass}>；children 传 <tr> 行（含加载中/空态）。
+      组件内部已封装：固定表头（表头独立成层，仅数据区纵向滚动）、
+      横向 onScroll 同步表头 scrollLeft、[overscroll-behavior:none] 关闭 macOS 触控板回弹。 */}
+  <FixedHeaderTable
+    minWidth={xxx}
+    columns={["w-[180px]", "w-auto", "w-[90px]", ...]}
+    header={labels.map((label) => (
+      <th key={label} className={thClass}>{label}</th>
+    ))}
+  >
+    {rows.map((row, i) => (
+      <tr key={row.id} className={cn("transition-colors hover:bg-[#f9fafb]", i < rows.length - 1 && "border-b border-[#f3f4f6]")}>
+        <td className="px-4 py-3 ...">...</td>
+      </tr>
+    ))}
+  </FixedHeaderTable>
+
+  {/* 含长文本列（剧集名、"剧集+集数"等不定长内容）改用 autoWidth：
+      columns 仅作占位（长度=列数），列宽按内容（含表头文字）自动撑开、
+      内容全展示不截断，放不下时整表横向滚动。td 仍需 whitespace-nowrap。 */}
+  <FixedHeaderTable
+    autoWidth
+    minWidth={xxx}
+    columns={new Array(labels.length).fill("")}
+    header={labels.map((label) => (
+      <th key={label} className={thClass}>{label}</th>
+    ))}
+  >
+    {rows.map((row, i) => (
+      <tr key={row.id} className={cn("transition-colors hover:bg-[#f9fafb]", i < rows.length - 1 && "border-b border-[#f3f4f6]")}>
+        <td className="px-4 py-3 whitespace-nowrap ...">...</td>
+      </tr>
+    ))}
+  </FixedHeaderTable>
+
+  {/* 分页区：border-t 分隔表格；shrink-0 不跟随表格滚动 */}
+  <div className="shrink-0 border-t border-[#e5e7eb]">
+    <ListPagination ... />
+  </div>
+</div>
+```
+
+**禁止**：
+- ❌ 外层使用 `flex flex-col gap-3` + 两个独立 `rounded-[8px] border bg-white` 卡片
+- ❌ 表格外 wrapper 加 `px-5`（会让表头下划线 / 行 border 内缩、两侧出现空白）
+- ❌ 表格外 wrapper 加 `mt-*`（无工具栏时表头与筛选区 `border-b` 之间会出现一条**纯白色间隙**，这是最常见的视觉 bug）
+- ❌ 表格和筛选区之间再额外加 `<div className="border-b">` 或间距，筛选区自身的 `border-b` 已承担视觉分隔
+
+## 六、组件规范
+
+### 按钮
+
+#### 主按钮（新增、查询、提交等主操作）
+```
+rounded-[6px] bg-[#38c08f] px-4 py-1.5 text-[13px] font-medium text-white hover:bg-[#2da87a] transition-colors
+```
+
+#### 次按钮（重置、取消、关闭等辅助操作）
+```
+rounded-[6px] border border-[#d1d5db] bg-white px-4 py-1.5 text-[13px] text-[#374151] hover:bg-[#f5f6f7] transition-colors
+```
+
+#### 危险按钮（删除确认等不可逆操作的主按钮）
+```
+rounded-[6px] bg-[#dc2626] px-4 py-1.5 text-[13px] font-medium text-white hover:bg-[#b91c1c] transition-colors
+```
+
+#### 列表操作按钮（表格「操作」列内的按钮，统一样式）
+结构：**白底 + 1px 边框 + 边框色与文字色保持一致（同为语义品牌色） + hover 时加同色系浅底**。不使用文字链接，不使用灰色默认边框。
+
+固定基础类：
+```
+flex h-[26px] items-center rounded-[4px] border bg-white px-2.5 text-[12px] transition-colors
+```
+
+按语义追加 `border-[色] text-[色] hover:bg-[浅底]`：
+
+| 语义 | 边框 & 文字色 | hover 背景 | 适用按钮 |
+|------|--------------|-----------|----------|
+| 主要 / 正向 | `#38c08f` | `bg-[#edfaf4]` | 编辑、启用、通过、上架 |
+| 链接 / 跳转 | `#2563eb` | `bg-[#eff6ff]` | 查看详情、上传、进入子页 |
+| 危险 / 负向 | `#f04438` | `bg-[#fef2f2]` | 删除、禁用、下架、驳回 |
+| 中性 | `#6b7280` | `bg-[#f5f6f7]` | 预览、复制、导出等无倾向性动作 |
+
+完整示例：
+```tsx
+{/* 主要：编辑 */}
+<button className="flex h-[26px] items-center rounded-[4px] border border-[#38c08f] bg-white px-2.5 text-[12px] text-[#38c08f] transition-colors hover:bg-[#edfaf4]">
+  编辑
+</button>
+
+{/* 链接：上传全集 */}
+<button className="flex h-[26px] items-center rounded-[4px] border border-[#2563eb] bg-white px-2.5 text-[12px] text-[#2563eb] transition-colors hover:bg-[#eff6ff]">
+  上传全集
+</button>
+
+{/* 危险：删除 */}
+<button className="flex h-[26px] items-center rounded-[4px] border border-[#f04438] bg-white px-2.5 text-[12px] text-[#f04438] transition-colors hover:bg-[#fef2f2]">
+  删除
+</button>
+
+{/* 中性：查看 */}
+<button className="flex h-[26px] items-center rounded-[4px] border border-[#6b7280] bg-white px-2.5 text-[12px] text-[#6b7280] transition-colors hover:bg-[#f5f6f7]">
+  查看
+</button>
+```
+
+多按钮横排使用 `gap-2`（8px），不换行（配合外层 `whitespace-nowrap`）。
+
+### 输入框 (FilterInput)
+```
+h-[30px] w-[148px~160px] rounded-[6px] border border-[#d1d5db] bg-white px-3
+text-[13px] text-[#374151] placeholder-[#9ca3af]
+outline-none focus:border-[#38c08f] transition-colors
+```
+
+**错误态**：校验失败时边框切换为危险红 `border-[#f04438]`，focus 时仍保持红色：
+```
+border-[#f04438] focus:border-[#f04438]
+```
+
+### 表单错误提示 (FieldError)
+
+所有字段级校验错误**必须**通过共享组件 `@/components/shared/field-error` 的 `FieldError` 呈现，不允许各页面自行写样式。
+
+```tsx
+import { FieldError, routeErrorToField } from "@/components/shared/field-error"
+
+<div>
+  <label>邮箱</label>
+  <input className={cn(baseInput, emailErr && "border-[#f04438] focus:border-[#f04438]")} />
+  {emailErr && <FieldError msg={emailErr} />}
+</div>
+```
+
+样式（固化在组件内，不要自行复制）：
+```
+mt-1.5 flex items-center gap-1 text-[12px] text-[#dc2626]
+左侧 12px 圆形感叹号 icon（SVG，currentColor）
+```
+
+#### 位置规则（硬性约束）
+- **哪个字段错，错误就出现在哪个字段的 `<input>` 正下方（`mt-1.5` = 6px 间距）**。
+- **禁止**把所有字段错误集中堆到表单底部或弹 toast。表单底部只允许出现"表单级错误"（不归属任何字段的场景，如网络错误、"系统繁忙"）。
+- 多字段同时报错时，每个字段下方各自显示自己的错误。
+
+#### 错误分发（`routeErrorToField`）
+当后端只返回一句 `message` 时，组件导出的工具函数按关键词分类：
+- 含 `"验证码"` → `code`
+- 含 `"邮箱"` / `"账号"` → `email`
+- 其他 → `form`（表单级）
+
+业务页面可以按这个约定把 catch 到的 message 放到不同 slot。如后端后续改为返回结构化字段（`{ field, message }`），前端优先使用 `field` 字段，不再走关键词路由。
+
+#### 输入时自动清除错误
+在 `onChange` 里同步 `setXxxErr("")`，避免用户修正输入后错误还赖着不走。
+
+#### 错误态与输入框的边框联动
+有错误时，输入框边框切换为 `border-[#f04438]`（见"输入框"小节"错误态"）；错误清除后恢复 `border-[#d1d5db]`。
+
+### 下拉选择 (SelectFilter)
+- 自定义实现，非 radix Select
+- 同输入框尺寸，右侧 ChevronDown 图标
+- 弹出层: `rounded-[6px] border border-[#e5e7eb] bg-white py-1 shadow-lg`
+- 选项高亮: `bg-[#f0fdf4] text-[#38c08f]`
+- 支持清除按钮 (X 图标)
+
+### 下拉多选 (MultiSelectFilter)
+- 同 SelectFilter 外观尺寸，选项左侧带复选框（`rounded-[3px]` 14×14，勾选态 `bg-[#38c08f]`）
+- 未选时显示 placeholder；已选 ≤ `maxTagCount`（默认 2）用 `、` 连接展示，多于时尾部加 `+N`
+- 支持整体清除（X 图标）
+- 默认宽度 `w-[180px]`
+
+### 日期范围 (DateRangePicker)
+- 自定义实现，弹出层双月并行（左当前月 / 右下一月）
+- 按钮图标 Calendar + ChevronDown；已选时显示 `YYYY-MM-DD ~ YYYY-MM-DD`
+
+### 状态标签 (StatusBadge)
+```
+inline-flex items-center rounded-[4px] px-2 py-0.5 text-[11.5px] font-medium
+```
+颜色映射模式:
+```typescript
+const statusConfig: Record<string, { bg: string; text: string }> = {
+  "已上线/已完成": { bg: "bg-[#ecfdf5]", text: "text-[#059669]" },
+  "待审核":       { bg: "bg-[#fffbeb]", text: "text-[#d97706]" },
+  "草稿/已失效":  { bg: "bg-[#f3f4f6]", text: "text-[#6b7280]" },
+  "已拒绝/失败":  { bg: "bg-[#fef2f2]", text: "text-[#dc2626]" },
+  "进行中/制作中": { bg: "bg-[#eff6ff]", text: "text-[#2563eb]" },
+  "已下架":       { bg: "bg-[#f3f4f6]", text: "text-[#6b7280]" },
+}
+```
+
+### 标签 (Tags)
+```
+rounded-[4px] bg-[#f3f4f6] px-1.5 py-0.5 text-[11.5px] text-[#6b7280]
+```
+
+### 表格
+- 表头: `bg-[#f9fafb]`, `text-[12.5px] font-medium text-[#6b7280]`
+- 行 hover: `hover:bg-[#f9fafb]`
+- 行分隔: `border-b border-[#f3f4f6]`
+- Cell 文字: 标题列 `text-[#111827]`, 普通列 `text-[#4b5563]`, 时间列 `text-[#6b7280]`
+
+### 列表的两种变体（组件库统一）
+全站列表分两类，按需从组件库里选一种，**不要各页面自造第三种写法**：
+
+- **变体 A · 普通列表（固定列）**：列由页面写死、不允许用户增减或排序。适用于字段少、结构稳定的页面（如用户信息、应用管理、订阅配置）。直接用 `FixedHeaderTable` 渲染写死的 `header`/`td` 即可，无需引入 `ColumnSettings`/`useColumnSettings`。
+- **变体 B · 自定义列列表（可显隐 + 可排序）**：字段多、不同运营关注点不同的页面（如充值订单）。在变体 A 的基础上叠加 `ColumnSettings` + `useColumnSettings`，让用户自选**显示哪些列**和**列的先后顺序**，偏好按登录用户存本地。
+
+两种变体**导出规则一致**：导出永远**按列表当前的字段与顺序**导出。变体 A 就是页面写死的那套列；变体 B 是用户当前可见列 + 拖拽后的顺序。前端统一把列 key 列表（`join(",")`）作为 `columns` 参数传给后端，后端据此决定 xlsx 的表头与每列取值（未传时回退默认全量列，向后兼容）。
+
+### 自定义列展示 (ColumnSettings) — 变体 B
+**统一使用 `ColumnSettings` 组件 + `useColumnSettings` hook**，禁止各页面自造持久化逻辑。
+
+- **组件**：`components/shared/column-settings.tsx`（工具栏里的「列设置」齿轮按钮 + 勾选下拉面板，与查询/导出按钮同高同风格）。
+- **拖拽排序**：面板分「已显示」「未显示」两个区。「已显示」区每行左侧有握把（`GripVertical`），可上下拖动调整顺序，拖到目标行会出现绿色顶边指示；这里的顺序即表格实际列顺序。取消勾选的列移入「未显示」区（不参与拖拽），重新勾选则追加到「已显示」末尾。必选列（`required`）标「固定」，不可取消。
+- **状态/持久化**：`hooks/use-column-settings.tsx`。列偏好**存浏览器本地 localStorage**（不落库、不加接口），key 里带上当前登录 token 派生的短标识，做到**同一浏览器重登回显、按登录用户隔离、换浏览器/设备重新设置**——符合演示项目「最小代价」定位。
+- **列定义即候选来源**：在页面里定义一份 `ALL_COLUMNS`（每列含 `key`/`label`/`render`，可选 `required`=必选不可取消、`defaultVisible`=默认是否显示），作为全部可选列的候选集合。
+- **`visibleKeys` 是可见性 + 顺序的唯一数据源**：hook 返回的 `visibleKeys`（及派生的 `orderedColumns`）既决定显示哪些列、也决定列的先后顺序。列表渲染、导出都必须按 `visibleKeys` 顺序取列，**不要**再按 `ALL_COLUMNS` 的定义顺序过滤，否则拖拽排序不生效。
+- **表格**：配合 `FixedHeaderTable autoWidth`，按 `visibleColumns` 生成 `header`/`columns`/`td`，列增减自动生效。
+- **导出**：导出必须**按当前可见列 + 用户排序**导出。前端把 `visibleColumns.map(c => c.key).join(",")` 作为 `columns` 参数传给后端（顺序即用户拖拽后的顺序），后端据此决定 xlsx 的表头与每列取值（未传时回退默认全量列，保证向后兼容）。
+
+```typescript
+// 组件库统一入口：从 @/components/shared 取用
+import { FixedHeaderTable, ColumnSettings, useColumnSettings, thClass } from "@/components/shared"
+
+// 1) 定义全部可展示列（唯一数据源）
+const ALL_COLUMNS = [
+  { key: "userId", label: "用户ID", required: true, render: (r) => <span>{r.userId}</span> },
+  { key: "paidAt", label: "支付时间", defaultVisible: false, render: (r) => <span>{r.paidAt}</span> },
+  // ...
+]
+
+// 2) 组件内接入
+const colSettings = useColumnSettings("recharge-order", ALL_COLUMNS) // 第一个参数是持久化 scope
+// 按用户自定义顺序取列：visibleKeys 是可见性 + 顺序的唯一数据源
+const columnByKey = new Map(ALL_COLUMNS.map((c) => [c.key, c]))
+const visibleColumns = colSettings.visibleKeys
+  .map((k) => columnByKey.get(k))
+  .filter((c): c is (typeof ALL_COLUMNS)[number] => !!c)
+
+// 3) 工具栏放齿轮按钮（与查询/重置/导出并列，导出按可见列）
+<ColumnSettings settings={colSettings} />
+await api.export({ ...filters, columns: visibleColumns.map((c) => c.key).join(",") })
+
+// 4) 表格按可见列渲染
+<FixedHeaderTable autoWidth columns={visibleColumns.map(() => "")}
+  header={visibleColumns.map((c) => <th key={c.key} className={thClass}>{c.label}</th>)}>
+  {data.map((row, i) => (
+    <tr key={row.id}>{visibleColumns.map((c) => <td key={c.key} className={tdBase}>{c.render(row)}</td>)}</tr>
+  ))}
+</FixedHeaderTable>
+```
+
+#### 后端导出映射（两种变体通用）
+导出接口按 `columns` 参数决定表头与取值，写法固定：维护一份 `validXxxColumns`（合法列 key 白名单，过滤非法入参）、`defaultXxxColumns`（未传 columns 时的兜底顺序）、`xxxColumnLabel(key)`（列 key → 中文表头）、`xxxColumnValue(key, item)`（列 key → 单元格值）。参考 `backend/internal/handler/recharge_order.go`。**新增/改名/删列时，前端 `ALL_COLUMNS` 与后端这四处必须同步改**，否则导出会与列表对不上。
+
+### 分页 (ListPagination)
+使用 `@/components/list-pagination` 组件:
+```typescript
+<ListPagination
+  total={total}
+  currentPage={page}
+  pageSize={pageSize}
+  onPageChange={setPage}
+  onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+/>
+```
+可选 pageSize: `10 | 20 | 50 | 100`
+
+### 弹窗/模态框 (自定义)
+不使用 shadcn Dialog，采用自定义 fixed 定位实现:
+```
+遮罩层: fixed inset-0 z-[N] bg-black/20~bg-black/80
+内容层: fixed inset-0 z-[N+1] flex items-center justify-center
+容器:   w-[360px~860px] rounded-[8px~10px] bg-white shadow-2xl
+标题区: px-6 pt-5 pb-4, text-[15px] font-semibold text-[#111827]
+操作区: border-t border-[#f3f4f6] px-6 py-3, flex justify-end gap-2
+```
+z-index 分层: 40→60→90→110→130→200（越深层级越高）
+
+### 二次确认 (Popconfirm)
+破坏性 / 状态回退类操作（删除、下架、禁用等不可逆或有影响面的动作），统一使用共享组件 `Popconfirm`（`@/components/shared`）就近弹出小气泡确认，禁止各页面自造确认弹窗，也不使用浏览器原生 `window.confirm`。
+```
+import { Popconfirm } from "@/components/shared"
+
+<Popconfirm
+  title="确认下架该剧集？"
+  description="下架后小程序端将无法看到该剧集"
+  onConfirm={() => handleAction(row)}
+>
+  <button className="...危险/负向按钮样式...">下架</button>
+</Popconfirm>
+```
+适用范围：删除单集、删除订阅配置、剧集下架等。
+不适用：上架等正向操作，点击时直接执行并在 `handle*` 内做校验后 `toast` 提示即可，无需二次确认。
+
+### 上传区域
+```
+虚线框: border-2 border-dashed border-[#d1d5db] bg-[#f9fafb] rounded-[6px]
+hover:  hover:border-[#38c08f] hover:bg-[#f0fdf4]
+提示文字: text-[12px] text-[#9ca3af]
+```
+上传完成使用 `ImageThumbnail` / `VideoThumbnail` 组件，绿色底 `border-[#bbf7d0] bg-[#f0fdf4]`
+
+### 空状态/骨架屏
+```
+animate-pulse
+h-[44px] rounded-[6px] bg-[#f3f4f6]  (筛选骨架)
+flex-1 rounded-[6px] bg-[#f9fafb]     (内容骨架)
+```
+
+## 七、图标规范
+
+统一使用 Lucide React，常用尺寸:
+- 侧边栏菜单: `size={16}`
+- 筛选区/按钮: `size={13}~size={14}`
+- 面包屑: `size={11}~size={12}`
+- 上传区: `size={16}~size={18}`
+- 关闭按钮: `size={14}`
+
+## 八、交互规范
+
+- 所有可点击元素: `transition-colors` 过渡
+- hover 缩略图/媒体: `transition-opacity hover:opacity-80`
+- 菜单选中态: 绿色文字 `text-[#38c08f]` + 浅绿底 `bg-[#edfaf4]`
+- 二级菜单选中指示: 绿色圆点 `h-1.5 w-1.5 rounded-full bg-[#38c08f]`
+- Focus 输入框: `focus:border-[#38c08f]`
+- 下拉箭头旋转: `transition-transform rotate-180`
+- 点击外部关闭浮层: `useEffect` + `mousedown` 事件监听
+
+## 九、全局 UI 行为规范
+
+### 9.1 筛选区
+- **统一组件**：筛选区一律使用 `components/shared/filter-bar.tsx` 的 `FilterBar`，禁止再手写 `flex flex-wrap` 筛选栏。
+- **等宽网格**：`FilterBar` 内部为 `repeat(auto-fill, minmax(300px, 1fr))` 网格，每列最小宽度默认 **300px**（`minColWidth`）。无论筛选项多少、换到第几行，每行每列都自动对齐、自动等宽拉伸/收缩，保持整齐；禁止出现横向滚动条。
+- **字段写法**：`FilterInput` / `SelectFilter` / `MultiSelectFilter` / `DateRangePicker` 放进 `FilterBar` 时**必须传 `block`**，且不再单独设 `width`（宽度交给网格）。
+- **操作按钮**：「查询」「重置」（及「列设置」「导出」等）放进 `FilterBar` 的 `actions` 插槽，组件内始终**右对齐、不被压缩**（`whitespace-nowrap` + 不参与列宽收缩），不再手写 `ml-auto`。
+- **按钮同行/换行（自适应对齐，全局统一）**：`FilterBar` 会实时测量「最后一行筛选项右侧的剩余像素宽度」与「按钮组自身完整宽度」，据此决定按钮落位，规则如下：
+  - **放得下**：按钮组脱离网格流、绝对定位到网格右下角，与最后一行筛选项**同行显示且垂直居中对齐**。因为不占网格流，网格底部不会被撑出多余空行，整个筛选区高度贴合内容，不会出现「筛选项和按钮整体偏上、下方留白」的问题。
+  - **放不下**：按钮组作为普通网格项**独占下一整行**，仍靠整行最右对齐。
+  - **判定依据是像素宽度，不是空列个数**：即使最后一行还剩空列位，只要那点宽度放不下完整按钮组，也换到下一行，绝不把按钮硬塞进去压住筛选项。
+  - **实现要点（改组件时遵守，勿倒退）**：用 `ResizeObserver` + `useLayoutEffect` 测量；用内层包裹层的 `scrollWidth` 取按钮真实宽度（外层横跨整行不能用于测量）；同行时用 `absolute bottom-0 right-0 h-[30px]`（对齐筛选控件行高 30px）而**不是负 `marginTop`**（负边距会在网格底部撑出一整行空白，导致整体偏上，已废弃）。
+- **列宽调整**：如需整体加宽/收窄列，改 `filter-bar.tsx` 的 `minColWidth` 默认值即可全局生效，不在单页覆盖。
+- **输入 trim**：所有文本框在提交筛选时，对输入值执行 `.trim()`，去除前后空格，保留中间空格。
+- **搜索模式**：
+  - 所有"ID 类"字段（如 bookId、comicId、scriptId）使用**精确匹配**（`===`）。
+  - 其他文本字段（如名称、创建人）使用**模糊匹配**（`.includes()`）。
+- **联动规则**：点击「查询」或「重置」时，分页页码重置为 1。
+
+### 9.2 表头
+- **统一组件**：所有列表表格必须使用 `FixedHeaderTable`（`components/shared/fixed-header-table.tsx`），禁止在页面里手写 `<table>` + `sticky top-0` 表头。表头单元格统一用导出的 `thClass`。
+- **结构性固定表头**：组件把表头与表体拆成两层 `<table>`，表头层不参与纵向滚动，仅数据区纵向滚动；两层共享同一份 `<colgroup>`（由 `columns` 生成）+ `table-fixed` 锁定列宽，因此表头与表体列永远对齐。
+- **横向同步**：数据区横向滚动时，组件通过 `onScroll` 把 `scrollLeft` 帧级同步给表头层，触控板惯性横滑也不会错位。
+- **禁用 border-collapse**：组件内部用 `border-separate border-spacing-0`（`border-collapse` 与固定表头同用时滚动会重绘抖动）。
+- **关闭触控板回弹**：滚动容器加 `[overscroll-behavior:none]`，并在 `app/globals.css` 的 `html, body` 上全局关闭 `overscroll-behavior`（macOS 触控板到达边界的橡皮筋回弹会被浏览器路由到根视口，必须在根上兜底，否则整张表格会“弹一下”）。
+- **不要再用 `translateZ(0)` / `will-change` 等合成层 hack**：那是早期未生效的尝试，已被上述结构性方案取代。
+- **两种列宽模式**：
+  - **默认（定宽）**：`columns` 传每列宽度 class（`w-[Npx]` / `w-auto`），走双表 `table-fixed`。适合列宽可预估、内容不长的表；内容超列宽时会溢出，需自行控制。
+  - **`autoWidth`（内容自适应，推荐用于含长文本的列）**：传 `autoWidth`，`columns` 只作占位（`new Array(列数).fill("")`）。此模式改用「单表 + sticky 表头 + `table-auto`」，每列按内容（含表头文字）自动撑开、**内容全展示不截断**，表头与数据天然对齐，放不下时整表横向滚动。含剧集名、"剧集+集数"等不定长文本的列（如剧集管理、充值订单）必须用此模式，避免出现内容被压缩、截断或与右侧列重叠。
+  - 两种模式下 `td` 内容都要加 `whitespace-nowrap`（`autoWidth` 下靠它撑开列宽）。
+- 表头不随列表内容的纵向滚动而移动，始终可见。
+
+### 9.3 分页
+- **默认启用**：所有列表页表格默认启用分页，无特殊说明时默认每页 **10 条**。
+- **位置固定**：分页区域固定展示在卡片底部（`border-t`），不随表格数据内容纵向滚动。整体布局应使筛选区 + 工具栏 + 分页固定，仅中间表格区域 `overflow-y-auto` 可滚动。
+- **布局**：左侧展示「共 N 条记录」，右侧展示分页器组件。
+- **每页条数**：可选 10 / 20 / 50 / 100 条，使用 `ListPagination` 组件。
+- **卡片内部结构**（从上到下各区域的滚动行为，与 §五 列表页标准结构保持一致）：
+```
+flex flex-col flex-1 min-h-0 rounded-lg border bg-white
+├── 筛选区 (shrink-0, 不滚动, px-5 py-4, border-b)
+├── 工具栏 (shrink-0, 不滚动, px-5 py-3, 可省略)
+├── 表格区 (FixedHeaderTable, flex-1 min-h-0, 无任何 px/py/mt)  ← 表头独立层固定，数据区纵向+横向滚动
+│   ├── 表头层 (shrink-0, overflow-hidden, scrollLeft 由 JS 同步)
+│   └── 数据区 (flex-1 min-h-0 overflow-auto, [overscroll-behavior:none])
+└── 分页区 (shrink-0, 不滚动, border-t)
+```
+
+### 9.5 区块间距（列表页卡片内部）
+
+**核心原则：间距由"工具栏"提供；无工具栏时表格表头紧贴筛选区 `border-b`，不留任何白色空隙。**
+
+- 筛选区与下一区块：依赖筛选区自身的 `border-b border-[#e5e7eb]` 做分隔，**不额外加 `gap` 或外 margin**。
+- 工具栏（如果存在）：`px-5 py-3` 上下对称 12px padding，承担筛选区与表格之间的视觉喘息。工具栏不存在时不保留占位空行。
+- 表格区：**不得加 `mt-*` / `pt-*` / `px-*`**。
+  - 有工具栏：由工具栏 `py-3` 提供间距
+  - 无工具栏：表头 `bg-[#f9fafb]` 直接顶着筛选区 `border-b`，像"连贯的一张表格"一样呈现
+- 表格区与分页区：表格区自身无 `border-b`，靠分页区的 `border-t border-[#e5e7eb]` 分隔。
+- 表格左右边距：由 `<th>` / `<td>` 的 `px-4` 决定；**表格外层任何 wrapper 都不得加左右 padding**，否则表头/行 border 会被内缩、两侧出现空白（典型 bug）。
+
+### 9.6 筛选区 → 表格的两种布局形态（硬性规则）
+
+列表页根据"筛选区和表格之间是否存在工具栏按钮（新增 / 导出 / 批量操作等）"分为两种互斥形态，**不允许出现第三种**。
+
+#### 形态 A：无工具栏 —— 筛选区与表格"连为一体"
+**适用**：本页只有查询/重置操作，没有行级外的新增等按钮（例：`user-management.tsx` 用户管理）。
+
+结构：
+```tsx
+<筛选区 border-b px-5 py-4 />
+<FixedHeaderTable minWidth={...} columns={[...]} header={<th className={thClass}>...</th>}>
+  {rows}
+</FixedHeaderTable>
+```
+
+视觉：筛选区底部的 `border-b` 下方立即是表头的 `bg-[#f9fafb]` 底色，**中间没有任何白色间隙**。
+
+#### 形态 B：有工具栏 —— 工具栏填充筛选区与表格之间的空间
+**适用**：本页需要"新增 / 导出 / 批量"等与行无关的顶部操作（例：`comic-management.tsx` 上传漫剧、`role-management.tsx` 角色管理）。
+
+结构：
+```tsx
+<筛选区 border-b px-5 py-4 />
+<div className="flex shrink-0 items-center px-5 py-3">
+  <button>+ 新增</button>
+</div>
+<div className="flex-1 min-h-0 overflow-auto">
+  <table>...</table>
+</div>
+```
+
+视觉：筛选区底部 `border-b` → 工具栏（上下各 12px）→ 表头。工具栏自身的 `py-3` 就是全部的"喘息"间距，不额外加任何 margin。
+
+#### 形态 A 与 B 之间的切换
+- 页面无论有没有工具栏，**表格区 `<div>` 本身永远保持 `flex-1 min-h-0 overflow-auto` 这一组 class**，不因形态切换而变化。
+- 工具栏按钮被权限判断隐藏后（`{canAdd && (...)}`），整个工具栏 `<div>` 应当一起不渲染（而不是保留一个空的带 `py-3` 的容器），此时页面自动退化为形态 A。
+
+#### 示例对照
+| 页面 | 形态 | 工具栏按钮 |
+|------|------|------------|
+| 用户管理 `user-management.tsx` | A | 无 |
+| 角色管理 `role-management.tsx` | B | `+ 新增` |
+| 上传漫剧 `comic-management.tsx` | B | `+ 新增漫剧` |
+| Demo 样板 `demo-list.tsx` | B | `+ 新增` |
+
+### 9.4 数据展示
+- **单行展示**：所有数据列字段内容、标签、操作按钮均保持单行，使用 `whitespace-nowrap` 禁止自动换行。
+- **自动拉伸**：列数较少时，表格 `w-full`，各列按容器宽度自动拉伸均匀分布以铺满整行。
+- **横向滚动**：列数较多或字段内容较长时，表格外层容器 `overflow-x-auto`，表格设置 `min-w-[xxx]` 最小宽度，用户可左右滑动查看完整数据。
+- **操作列**：操作按钮统一使用「列表操作按钮」样式（带边框白底，详见 六.组件规范 › 按钮 › 列表操作按钮），以 `gap-2` 间隔横向排列，`whitespace-nowrap` 不换行。按钮文字色按语义选取（主要=绿、链接=蓝、危险=红、中性=灰），hover 时边框切换为同色。**不再使用纯文字链接样式**。
+
+## 十、编码规范
+
+### 10.1 文件组织
+- 所有业务页面为 `"use client"` 组件，位于 `components/` 目录
+- 通过 `next/dynamic` 懒加载各业务组件，`ssr: false`
+- 页面内部通过 `selectedKey` 状态切换路由，非 Next.js 文件路由
+- 可复用的筛选/弹窗/抽屉等基础 UI 统一放在 `components/shared/`（本项目不使用 shadcn/ui）
+
+### 10.2 类型定义
+- 类型定义位于组件文件顶部，以 `// ─── Types ───` 分隔线标记
+- 接口命名: `XxxRow`(表格行), `FilterForm`(筛选表单), `XxxForm`(编辑表单), `XxxFormErrors`(校验错误)
+- 枚举值使用中文联合类型: `type Status = "启用" | "禁用"`
+
+### 10.3 数据 Mock
+- Mock 数据定义在组件文件内，以 `// ─── Mock Data ───` 分隔线标记
+- 使用 `const xxxMock: XxxRow[] = [...]` 模式
+- 默认筛选值: `const defaultFilters: FilterForm = { ... }`
+
+### 10.4 状态管理
+- 使用 `useState` 管理本地状态，不使用全局状态库
+- 分页状态: `page` (number), `pageSize` (PageSizeOption)
+- 筛选+分页联动: 查询/重置时重置 page 为 1
+- 客户端过滤: `useMemo` / `useCallback` 过滤 mock 数据
+
+### 10.5 组件内分区
+使用注释分隔线划分区域:
+```typescript
+// ─── Types ──────────────
+// ─── Mock Data ──────────
+// ─── Status Badge ───────
+// ─── FilterInput ────────
+// ─── SelectFilter ───────
+// ─── DateRangePicker ────
+// ─── Main Component ─────
+```
+
+### 10.6 Props 模式
+- 筛选组件统一 Props: `{ label, placeholder, value, onChange, width? }`
+- 业务组件独立完整，不依赖外部 props（仅 AdminLayout 通过 key 切换）
