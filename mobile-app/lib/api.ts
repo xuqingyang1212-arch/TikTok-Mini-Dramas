@@ -12,13 +12,27 @@ interface ApiResponse<T = unknown> {
   data: T
 }
 
+function getAcceptLanguageHeader(): string {
+  if (typeof window === "undefined") return "zh-CN"
+
+  const savedLocale = localStorage.getItem("mini_drama_language")
+  if (savedLocale === "en") return "en-US"
+  if (savedLocale === "zh") return "zh-CN"
+
+  const docLang = document.documentElement.lang || navigator.language || "zh-CN"
+  return docLang.toLowerCase().startsWith("en") ? "en-US" : "zh-CN"
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers = new Headers(options?.headers)
+  headers.set("Content-Type", "application/json")
+  if (!headers.has("Accept-Language")) {
+    headers.set("Accept-Language", getAcceptLanguageHeader())
+  }
+
   const res = await fetch(`${API_BASE}${API_PREFIX}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers as Record<string, string>),
-    },
+    headers,
   })
 
   const json: ApiResponse<T> = await res.json()

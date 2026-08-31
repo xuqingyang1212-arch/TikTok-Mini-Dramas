@@ -113,7 +113,7 @@ func SetupRouter(mode string) *gin.Engine {
 
 	// ─── Mini App API (小程序接口) ────────────────────────────────────────────
 	// 小程序端调用的接口，无需后台登录认证
-	mini := r.Group("/api/mini")
+	mini := r.Group("/api/mini", miniLanguageMiddleware())
 	{
 		// 获取可用小程序列表
 		mini.GET("/apps", MiniListApps)

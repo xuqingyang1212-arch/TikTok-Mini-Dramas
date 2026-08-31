@@ -4,11 +4,31 @@
 
 ## 通用约定
 
-- Base URL：`http://localhost:8080`，局域网 `http://10.235.120.6:8080`
+- Base URL：`http://localhost:8080`，局域网 `http://10.235.120.10:8080`
 - 所有接口无需后台登录鉴权。
 - 统一响应结构：`{ "code": 0, "message": "success", "data": {...} }`，`code != 0` 为失败，`message` 为原因。
 - 时间字段为 RFC3339 字符串（如 `2026-08-11T11:07:10+08:00`）。
 - `userId` 为登录接口返回的雪花字符串，凡涉及“当前用户解锁状态”的接口都应带上，未带则按未登录（仅免费集）处理。
+
+### 请求语言
+
+所有 `/api/mini` 接口都可以统一携带标准请求头 `Accept-Language`。前端应把**小程序内当前选择的语言**写入该请求头，不要依赖系统或浏览器自动携带的默认语言。
+
+| 小程序语言 | 推荐请求头 | 兼容值 |
+| --- | --- | --- |
+| 中文 | `Accept-Language: zh-CN` | `zh`、任意 `zh-*` |
+| 英文 | `Accept-Language: en-US` | `en`、任意 `en-*` |
+
+- 支持标准语言列表和权重，例如 `en-US,en;q=0.9,zh-CN;q=0.8`。
+- 未传请求头，或没有匹配到 `zh` / `en` 时，默认语言为英文 `en-US`。
+- 当前阶段服务端仅统一接收并解析语言，为后续多语言内容返回预留；**所有接口暂时都不按语言过滤数据，也不校验剧集语言**。
+- 当前接口响应结构和业务逻辑保持不变。切换语言不会改变剧集列表，也不需要更换现有 `dramaId`。
+
+请求示例：
+
+```bash
+curl -H 'Accept-Language: en-US' 'http://localhost:8080/api/mini/dramas?page=1&pageSize=10'
+```
 
 ## 接口总览
 
@@ -139,7 +159,7 @@
 
 `GET /api/mini/dramas?page=1&pageSize=10`
 
-返回已上架剧集，按创建时间倒序。
+返回全部已上架剧集，按创建时间倒序。当前 `Accept-Language` 不参与列表过滤。
 
 响应：
 
@@ -170,13 +190,13 @@
 
 `GET /api/mini/dramas/:id`
 
-响应 `data` 同列表单项结构：`id` / `name` / `coverUrl` / `language` / `episodeCount` / `paywallEpisode`。
+响应 `data` 同列表单项结构：`id` / `name` / `coverUrl` / `language` / `episodeCount` / `paywallEpisode`。当前不校验请求语言与剧集语言是否一致。
 
 ## 5. 单集列表
 
 `GET /api/mini/dramas/:id/episodes?userId={userId}`
 
-返回该剧全部单集及当前用户的解锁情况。
+返回该剧全部单集及当前用户的解锁情况。当前不校验请求语言与剧集语言是否一致。
 
 响应：
 
@@ -210,13 +230,13 @@
 
 `GET /api/mini/dramas/:id/episodes/:episodeNo?userId={userId}`
 
-返回单集详情，字段同接口 5 的单项。用于按需拉取指定集的播放信息。
+返回单集详情，字段同接口 5 的单项。用于按需拉取指定集的播放信息。当前不校验请求语言与剧集语言是否一致。
 
 ## 7. 剧集逐集解锁详情（当前用户）
 
 `GET /api/mini/dramas/:id/unlock-status?userId={userId}`
 
-返回当前用户在这部剧的每一集解锁状态与解锁来源。用于剧集详情页展示“哪些免费、哪些已购、哪些会员解锁、哪些未解锁”。
+返回当前用户在这部剧的每一集解锁状态与解锁来源。用于剧集详情页展示“哪些免费、哪些已购、哪些会员解锁、哪些未解锁”。当前不校验请求语言与剧集语言是否一致。
 
 响应：
 
