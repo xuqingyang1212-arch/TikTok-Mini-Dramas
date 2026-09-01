@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback } from "react"
 import { ListPagination } from "@/components/list-pagination"
 import { FilterInput, SelectFilter, RightDrawer, Popconfirm, FormInput, FormSelect, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
-import { subscriptionApi, appApi, type SubscriptionPlanItem } from "@/lib/api"
+import { subscriptionApi, type SubscriptionPlanItem } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { useAppOptions } from "@/hooks/use-app-options"
 
 // ─────────────── Types ───────────────
 interface AppOption {
@@ -207,17 +208,11 @@ export default function SubscriptionManagement() {
   const [list, setList] = useState<SubscriptionPlanItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [appOptions, setAppOptions] = useState<AppOption[]>([])
+  const { options: appOptionsRaw } = useAppOptions()
+  const appOptions: AppOption[] = appOptionsRaw.map((app) => ({ id: Number(app.id), name: app.name }))
 
   const [drawerMode, setDrawerMode] = useState<"add" | "edit" | null>(null)
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlanItem | undefined>()
-
-  // 加载小程序列表
-  useEffect(() => {
-    appApi.list({ pageSize: 1000 }).then((res) => {
-      setAppOptions(res.list.map((a: any) => ({ id: a.id, name: a.name })))
-    }).catch(() => {})
-  }, [])
 
   const fetchList = useCallback(async () => {
     setLoading(true)
@@ -244,16 +239,28 @@ export default function SubscriptionManagement() {
   function handleReset() { resetFilters(); resetPage() }
 
   function handleCreate() {
+    if (!canAdd) {
+      toast.error("暂无新建权限")
+      return
+    }
     setEditingPlan(undefined)
     setDrawerMode("add")
   }
 
   function handleEdit(row: SubscriptionPlanItem) {
+    if (!canEdit) {
+      toast.error("暂无编辑权限")
+      return
+    }
     setEditingPlan(row)
     setDrawerMode("edit")
   }
 
   async function handleDelete(row: SubscriptionPlanItem) {
+    if (!canDelete) {
+      toast.error("暂无删除权限")
+      return
+    }
     try {
       await subscriptionApi.delete(row.id)
       toast.success("删除成功")
@@ -264,6 +271,14 @@ export default function SubscriptionManagement() {
   }
 
   async function handleSubmit(form: PlanForm) {
+    if (drawerMode === "add" && !canAdd) {
+      toast.error("暂无新建权限")
+      return
+    }
+    if (drawerMode === "edit" && !canEdit) {
+      toast.error("暂无编辑权限")
+      return
+    }
     const body = {
       appId: parseInt(form.appId, 10),
       period: form.period,
@@ -329,14 +344,16 @@ export default function SubscriptionManagement() {
       </FilterBar>
 
       {/* 工具栏（新建按钮） */}
-      <div className="flex shrink-0 items-center px-5 py-3">
-        <button
-          onClick={handleCreate}
-          className="flex h-[30px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
-        >
-          + 新建订阅配置
-        </button>
-      </div>
+      {canAdd && (
+        <div className="flex shrink-0 items-center px-5 py-3">
+          <button
+            onClick={handleCreate}
+            className="flex h-[30px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
+          >
+            + 新建订阅配置
+          </button>
+        </div>
+      )}
 
       {/* 表格：统一固定表头组件 */}
       <FixedHeaderTable
@@ -359,13 +376,17 @@ export default function SubscriptionManagement() {
                 <td className="px-4 py-3 text-[#374151] font-mono text-[12px]">{row.tierId || "-"}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => handleEdit(row)} className="text-[#38c08f] hover:underline">编辑</button>
-                    <Popconfirm
-                      title="确认删除该订阅配置？"
-                      onConfirm={() => handleDelete(row)}
-                    >
-                      <button className="text-[#dc2626] hover:underline">删除</button>
-                    </Popconfirm>
+                    {canEdit && (
+                      <button onClick={() => handleEdit(row)} className="text-[#38c08f] hover:underline">编辑</button>
+                    )}
+                    {canDelete && (
+                      <Popconfirm
+                        title="确认删除该订阅配置？"
+                        onConfirm={() => handleDelete(row)}
+                      >
+                        <button className="text-[#dc2626] hover:underline">删除</button>
+                      </Popconfirm>
+                    )}
                   </div>
                 </td>
               </tr>

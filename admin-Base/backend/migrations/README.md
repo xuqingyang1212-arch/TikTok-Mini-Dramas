@@ -33,3 +33,23 @@ mysql -u<user> -p<password> < migrations/001_init.up.sql
 4. 在部署流程中执行 migration。
 
 正式切换前不要同时让 AutoMigrate 和版本化 DDL 修改同一结构。
+
+## UTC 时间迁移
+
+项目业务时间统一使用 MySQL `DATETIME(3)` 保存 UTC，Go 连接固定使用 `loc=UTC`，并将 MySQL 会话时区设为 `+00:00`。
+
+历史数据库曾保存 UTC+8 墙上时间。后端启动时会在 `data_migrations` 表检查唯一标记 `20260831_convert_legacy_utc8_to_utc`：
+
+- 未执行时，在同一事务内将 13 张业务表的 30 个时间字段统一减 8 小时；
+- `NULL` 时间保持 `NULL`；
+- 成功后写入唯一标记，后续启动不会重复转换；
+- 任一更新失败时整个事务回滚。
+
+首次在旧数据库部署前必须停止所有写入并执行完整备份：
+
+```bash
+mysqldump -h 127.0.0.1 -u root --single-transaction --routines --triggers \
+  tiktok_mini_drama > tiktok_mini_drama-before-utc.sql
+```
+
+备份完成后再启动新版后端。新建的空数据库也会写入迁移标记，但不会产生数据变换。

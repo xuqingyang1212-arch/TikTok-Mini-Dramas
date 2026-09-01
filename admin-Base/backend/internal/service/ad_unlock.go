@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
@@ -80,7 +81,7 @@ func adSessionResult(session model.AdUnlockSession, unlockType string, unlocked 
 		DramaID:       fmt.Sprintf("%d", session.DramaID),
 		EpisodeNo:     session.EpisodeNo,
 		AdPlacementID: session.AdPlacementID,
-		ExpireAt:      session.ExpireAt.Format(time.RFC3339),
+		ExpireAt:      datetime.FormatUTC(session.ExpireAt),
 		UnlockType:    unlockType,
 		IsUnlocked:    unlocked,
 	}
@@ -118,7 +119,7 @@ func (s *adUnlockService) Create(userID, dramaID int64, episodeNo int) (*AdUnloc
 			return err
 		}
 
-		now := time.Now()
+		now := datetime.NowUTC()
 		if err := tx.Model(&model.AdUnlockSession{}).
 			Where("app_id = ? AND user_id = ? AND drama_id = ? AND episode_no = ? AND status = ? AND expire_at <= ?",
 				currentApp.ID, user.ID, drama.ID, episodeNo, "pending", now).
@@ -250,7 +251,7 @@ func (s *adUnlockService) Complete(sessionNo string, userID int64) (*AdUnlockSes
 			return ErrAdSessionNotFound
 		}
 
-		now := time.Now()
+		now := datetime.NowUTC()
 		if !session.ExpireAt.After(now) {
 			if err := tx.Model(&session).Updates(map[string]any{"status": "expired", "active_key": nil, "updated_at": now}).Error; err != nil {
 				return err
@@ -357,7 +358,7 @@ func (s *adUnlockService) Cancel(sessionNo string, userID int64) (*AdUnlockSessi
 			return ErrAdSessionNotFound
 		}
 
-		now := time.Now()
+		now := datetime.NowUTC()
 		if !session.ExpireAt.After(now) {
 			if err := tx.Model(&session).Updates(map[string]any{"status": "expired", "active_key": nil, "updated_at": now}).Error; err != nil {
 				return err
@@ -384,7 +385,7 @@ func (s *adUnlockService) Cancel(sessionNo string, userID int64) (*AdUnlockSessi
 }
 
 func (s *adUnlockService) ExpirePending() (int64, error) {
-	now := time.Now()
+	now := datetime.NowUTC()
 	res := s.db.Model(&model.AdUnlockSession{}).
 		Where("status = ? AND expire_at <= ?", "pending", now).
 		Updates(map[string]any{"status": "expired", "active_key": nil, "updated_at": now})

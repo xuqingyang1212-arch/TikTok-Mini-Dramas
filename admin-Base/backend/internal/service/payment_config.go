@@ -3,9 +3,9 @@ package service
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
@@ -21,15 +21,15 @@ type PaymentConfigFilter struct {
 }
 
 type PaymentConfigItem struct {
-	ID          string    `json:"id"`
-	AppID       string    `json:"appId"`
-	AppName     string    `json:"appName"`
-	DramaID     string    `json:"dramaId"`
-	DramaName   string    `json:"dramaName"`
-	BeansPerEp  int       `json:"beansPerEp"`
-	Description string    `json:"description"`
-	ConfigType  string    `json:"configType"` // 全局、小程序级、剧集级、小程序+剧集级
-	CreatedAt   time.Time `json:"createdAt"`
+	ID          string        `json:"id"`
+	AppID       string        `json:"appId"`
+	AppName     string        `json:"appName"`
+	DramaID     string        `json:"dramaId"`
+	DramaName   string        `json:"dramaName"`
+	BeansPerEp  int           `json:"beansPerEp"`
+	Description string        `json:"description"`
+	ConfigType  string        `json:"configType"` // 全局、小程序级、剧集级、小程序+剧集级
+	CreatedAt   datetime.Time `json:"createdAt"`
 }
 
 type CreatePaymentConfigInput struct {
@@ -156,7 +156,7 @@ func (s *paymentConfigService) List(f PaymentConfigFilter) ([]PaymentConfigItem,
 			BeansPerEp:  c.BeansPerEp,
 			Description: c.Description,
 			ConfigType:  configType,
-			CreatedAt:   c.CreatedAt,
+			CreatedAt:   datetime.From(c.CreatedAt),
 		}
 	}
 	return items, total, nil
@@ -196,6 +196,9 @@ func (s *paymentConfigService) Create(in CreatePaymentConfigInput) (*model.Payme
 		config.BeansPerEp = 100 // 默认100
 	}
 	if err := s.db.Create(&config).Error; err != nil {
+		if isDuplicate(err) {
+			return nil, ErrPaymentConfigDuplicate
+		}
 		return nil, err
 	}
 	return &config, nil
@@ -242,33 +245,43 @@ func (s *paymentConfigService) Delete(id int64) error {
 func (s *paymentConfigService) GetEffectiveConfig(appID, dramaID int64) (int, error) {
 	var config model.PaymentConfig
 
+	lookup := func(query string, args ...interface{}) (int, bool, error) {
+		err := s.db.Where(query, args...).First(&config).Error
+		if err == nil {
+			return config.BeansPerEp, true, nil
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+
 	// 1. 先找 AppID+DramaID
 	if appID > 0 && dramaID > 0 {
-		if err := s.db.Where("app_id = ? AND drama_id = ?", appID, dramaID).First(&config).Error; err == nil {
-			return config.BeansPerEp, nil
+		if value, found, err := lookup("app_id = ? AND drama_id = ?", appID, dramaID); err != nil || found {
+			return value, err
 		}
 	}
 
 	// 2. 再找 DramaID only
 	if dramaID > 0 {
-		if err := s.db.Where("app_id = 0 AND drama_id = ?", dramaID).First(&config).Error; err == nil {
-			return config.BeansPerEp, nil
+		if value, found, err := lookup("app_id = 0 AND drama_id = ?", dramaID); err != nil || found {
+			return value, err
 		}
 	}
 
 	// 3. 再找 AppID only
 	if appID > 0 {
-		if err := s.db.Where("app_id = ? AND drama_id = 0", appID).First(&config).Error; err == nil {
-			return config.BeansPerEp, nil
+		if value, found, err := lookup("app_id = ? AND drama_id = 0", appID); err != nil || found {
+			return value, err
 		}
 	}
 
 	// 4. 全局默认
-	if err := s.db.Where("app_id = 0 AND drama_id = 0").First(&config).Error; err == nil {
-		return config.BeansPerEp, nil
+	if value, found, err := lookup("app_id = 0 AND drama_id = 0"); err != nil || found {
+		return value, err
 	}
 
-	// 如果没有任何配置，返回默认100
 	return 100, nil
 }
 
@@ -286,7 +299,12 @@ func (s *paymentConfigService) EnsureGlobalDefault() error {
 			BeansPerEp:  100,
 			Description: "全局默认配置：每集100 Beans",
 		}
-		return s.db.Create(&config).Error
+		if err := s.db.Create(&config).Error; err != nil {
+			if isDuplicate(err) {
+				return nil
+			}
+			return err
+		}
 	}
 	return nil
 }

@@ -10,6 +10,7 @@ import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { usePerm } from "@/components/admin-layout"
 
 // ─────────────── Types ───────────────
 interface DramaItem {
@@ -354,6 +355,8 @@ function DetailDrawer({
   onReupload,
   onDeleteEpisode,
   uploadingEpisodes,
+  canUpload,
+  canDeleteEpisode,
 }: {
   drama: DramaItem
   episodes: EpisodeItem[]
@@ -363,6 +366,8 @@ function DetailDrawer({
   onReupload: (episodeId: string, file: File) => void
   onDeleteEpisode: (episodeId: string) => void
   uploadingEpisodes: EpisodeUploadStatus[]
+  canUpload: boolean
+  canDeleteEpisode: boolean
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [activeTab, setActiveTab] = useState(0)
@@ -441,8 +446,8 @@ function DetailDrawer({
         <div className="flex items-center gap-3">
           <button
             onClick={handleBatchUploadClick}
-            disabled={isUploading}
-            className={`flex h-[32px] items-center gap-1.5 rounded-[6px] px-4 text-[13px] font-medium text-white transition-colors ${isUploading ? "cursor-not-allowed bg-[#9ca3af]" : "bg-[#38c08f] hover:bg-[#2da87a]"}`}
+            disabled={isUploading || !canUpload}
+            className={`flex h-[32px] items-center gap-1.5 rounded-[6px] px-4 text-[13px] font-medium text-white transition-colors ${isUploading || !canUpload ? "cursor-not-allowed bg-[#9ca3af]" : "bg-[#38c08f] hover:bg-[#2da87a]"}`}
           >
             <Upload size={14} />上传剧集
           </button>
@@ -560,23 +565,25 @@ function DetailDrawer({
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 opacity-0 transition-all group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
-                        <label
-                          className="flex h-[26px] cursor-pointer items-center gap-1 rounded-[5px] border border-[#e5e7eb] bg-white px-2 text-[12px] text-[#6b7280] hover:border-[#d1d5db] hover:bg-[#f5f6f7]"
-                        >
-                          <RefreshCw size={11} />
-                          <span>重传</span>
-                          <input
-                            type="file"
-                            accept="video/mp4,video/mov,video/webm,video/avi,video/x-matroska"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0]
-                              if (file) onReupload(ep.id, file)
-                              e.target.value = ""
-                            }}
-                            className="hidden"
-                          />
-                        </label>
-                        {ep.episodeNo === Math.max(...episodes.map(e => e.episodeNo)) && (
+                        {canUpload && (
+                          <label
+                            className="flex h-[26px] cursor-pointer items-center gap-1 rounded-[5px] border border-[#e5e7eb] bg-white px-2 text-[12px] text-[#6b7280] hover:border-[#d1d5db] hover:bg-[#f5f6f7]"
+                          >
+                            <RefreshCw size={11} />
+                            <span>重传</span>
+                            <input
+                              type="file"
+                              accept="video/mp4,video/mov,video/webm,video/avi,video/x-matroska"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) onReupload(ep.id, file)
+                                e.target.value = ""
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                        {canDeleteEpisode && ep.episodeNo === Math.max(...episodes.map(e => e.episodeNo)) && (
                           <Popconfirm
                             title="确定删除最后一集？"
                             description="此操作不可恢复"
@@ -606,6 +613,12 @@ function DetailDrawer({
 
 // ─────────────── Main Component ───────────────
 export default function DramaManagement() {
+  const canCreate = usePerm(["resource.drama.add", "resource.drama.create"])
+  const canEdit = usePerm(["resource.drama.edit", "resource.drama.update"])
+  const canPublish = usePerm(["resource.drama.edit", "resource.drama.update"])
+  const canUpload = usePerm(["resource.drama.upload", "resource.drama.edit", "resource.drama.create"])
+  const canDeleteEpisode = usePerm(["resource.drama.delete", "resource.drama.remove", "resource.drama.edit"])
+
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
 
@@ -660,6 +673,10 @@ export default function DramaManagement() {
   function handleReset() { resetFilters(); resetPage() }
 
   async function handleToggleStatus(row: DramaItem) {
+    if (!canPublish) {
+      toast.error("暂无发布/下架权限")
+      return
+    }
     if (row.status === "下架" && row.episodeCount === 0) {
       toast.error("总集数为0，不可上架")
       return
@@ -678,11 +695,19 @@ export default function DramaManagement() {
   }
 
   function handleCreate() {
+    if (!canCreate) {
+      toast.error("暂无创建权限")
+      return
+    }
     setEditingDrama(undefined)
     setDrawerMode("add")
   }
 
   function handleEdit(row: DramaItem) {
+    if (!canEdit) {
+      toast.error("暂无编辑权限")
+      return
+    }
     setEditingDrama(row)
     setDrawerMode("edit")
   }
@@ -728,6 +753,10 @@ export default function DramaManagement() {
 
   async function handleBatchUpload(files: FileList) {
     if (!detailDrama) return
+    if (!canUpload) {
+      toast.error("暂无上传权限")
+      return
+    }
 
     // Parse and sort files by episode number
     const fileList = Array.from(files)
@@ -847,6 +876,10 @@ export default function DramaManagement() {
 
   async function handleReupload(episodeId: string, file: File) {
     if (!detailDrama) return
+    if (!canUpload) {
+      toast.error("暂无上传权限")
+      return
+    }
 
     try {
       toast.info("正在上传...")
@@ -864,6 +897,10 @@ export default function DramaManagement() {
 
   async function handleDeleteEpisode(episodeId: string) {
     if (!detailDrama) return
+    if (!canDeleteEpisode) {
+      toast.error("暂无删除权限")
+      return
+    }
     try {
       await episodeApi.delete(detailDrama.id, episodeId)
       toast.success("删除成功")
@@ -880,6 +917,14 @@ export default function DramaManagement() {
   }
 
   async function handleSubmitDrama(form: DramaForm) {
+    if (drawerMode === "add" && !canCreate) {
+      toast.error("暂无创建权限")
+      return
+    }
+    if (drawerMode === "edit" && !canEdit) {
+      toast.error("暂无编辑权限")
+      return
+    }
     try {
       if (drawerMode === "add") {
         await dramaApi.create(form)
@@ -931,14 +976,16 @@ export default function DramaManagement() {
       </FilterBar>
 
       {/* 操作栏 */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e7eb] px-5 py-3">
-        <button
-          onClick={handleCreate}
-          className="flex h-[30px] items-center gap-1.5 rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
-        >
-          <Plus size={14} />创建剧集
-        </button>
-      </div>
+      {canCreate && (
+        <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e7eb] px-5 py-3">
+          <button
+            onClick={handleCreate}
+            className="flex h-[30px] items-center gap-1.5 rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
+          >
+            <Plus size={14} />创建剧集
+          </button>
+        </div>
+      )}
 
       {/* 表格区：统一固定表头组件（固定表头 + 独立滚动 + 防触控板回弹） */}
       <FixedHeaderTable
@@ -976,13 +1023,15 @@ export default function DramaManagement() {
                   <td className="px-4 py-3 text-[12.5px] text-[#6b7280] whitespace-nowrap">{formatDateTime(row.createdAt)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleEdit(row)}
-                        className="rounded border border-[#38c08f] px-2.5 py-1 text-[12px] text-[#38c08f] transition-colors hover:bg-[#f0fdf4]"
-                      >
-                        编辑
-                      </button>
-                      {row.status === "上架" ? (
+                      {canEdit && (
+                        <button
+                          onClick={() => handleEdit(row)}
+                          className="rounded border border-[#38c08f] px-2.5 py-1 text-[12px] text-[#38c08f] transition-colors hover:bg-[#f0fdf4]"
+                        >
+                          编辑
+                        </button>
+                      )}
+                      {canPublish && (row.status === "上架" ? (
                         <Popconfirm
                           title="确认下架该剧集？"
                           description="下架后小程序端将无法看到该剧集"
@@ -1001,7 +1050,7 @@ export default function DramaManagement() {
                         >
                           上架
                         </button>
-                      )}
+                      ))}
                       <button
                         onClick={() => handleViewDetail(row)}
                         className="rounded border border-[#6b7280] px-2.5 py-1 text-[12px] text-[#6b7280] transition-colors hover:bg-[#f9fafb]"
@@ -1061,6 +1110,8 @@ export default function DramaManagement() {
           onReupload={handleReupload}
           onDeleteEpisode={handleDeleteEpisode}
           uploadingEpisodes={uploadingEpisodes}
+          canUpload={canUpload}
+          canDeleteEpisode={canDeleteEpisode}
         />
       )}
     </div>

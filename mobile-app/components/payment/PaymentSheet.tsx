@@ -1,6 +1,7 @@
 "use client"
 
 import { X } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/I18nProvider"
 import { BeansOptionCard, type BeansOption } from "./BeansOptionCard"
 import { VipOptionCard, type VipOption } from "./VipOptionCard"
@@ -13,6 +14,7 @@ interface PaymentSheetProps {
   onSelectBeans: (option: BeansOption) => void
   onSelectVip: (option: VipOption) => void
   onClose: () => void
+  closeDisabled?: boolean
 }
 
 /**
@@ -28,6 +30,7 @@ export function PaymentSheet({
   onSelectBeans,
   onSelectVip,
   onClose,
+  closeDisabled = false,
 }: PaymentSheetProps) {
   const { t } = useI18n()
 
@@ -48,11 +51,15 @@ export function PaymentSheet({
         </span>
         <button
           type="button"
-          onClick={onClose}
+          onClick={closeDisabled ? undefined : onClose}
           aria-label={t("common.close")}
-          className="-mr-1 flex h-11 w-11 items-center justify-center"
+          disabled={closeDisabled}
+          className="-mr-1 flex h-11 w-11 items-center justify-center disabled:cursor-not-allowed"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5">
+          <span className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5",
+            closeDisabled && "opacity-40",
+          )}>
             <X size={17} className="text-white/70" />
           </span>
         </button>

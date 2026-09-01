@@ -1,20 +1,24 @@
 import { useState, useCallback, useMemo } from "react"
 
-function emptyOf<T extends object>(shape: T): T {
-  const empty: Record<string, unknown> = {}
-  const src = shape as unknown as Record<string, unknown>
-  for (const key in src) {
-    const val = src[key]
-    empty[key] = Array.isArray(val) ? [] : typeof val === "number" ? 0 : ""
+function emptyValue<T>(value: T): T {
+  if (Array.isArray(value)) return [] as T
+  if (value !== null && typeof value === "object") {
+    const next: Record<string, unknown> = {}
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      next[key] = emptyValue((value as Record<string, unknown>)[key])
+    }
+    return next as T
   }
-  return empty as T
+  if (typeof value === "number") return 0 as T
+  if (typeof value === "boolean") return false as T
+  if (typeof value === "string") return "" as T
+  return value
 }
 
 export function useFilters<T extends object>(initialFilters: T) {
+  const emptyState = useMemo(() => emptyValue(initialFilters), [initialFilters])
   const [draft, setDraft] = useState<T>(initialFilters)
   const [active, setActive] = useState<T>(initialFilters)
-
-  const emptyState = useMemo(() => emptyOf(initialFilters), [initialFilters])
 
   const update = useCallback(<K extends keyof T>(key: K, value: T[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }))

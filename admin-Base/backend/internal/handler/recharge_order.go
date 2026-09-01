@@ -2,8 +2,8 @@ package handler
 
 import (
 	"fmt"
-	"time"
 
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/service"
 
@@ -13,18 +13,7 @@ import (
 
 // parseRechargeOrderFilter 解析充值订单筛选条件（列表与导出共用）。
 func parseRechargeOrderFilter(c *gin.Context) service.RechargeOrderFilter {
-	var createdAtFrom, createdAtTo *time.Time
-	if from := c.Query("createdAtFrom"); from != "" {
-		if t, err := time.Parse("2006-01-02", from); err == nil {
-			createdAtFrom = &t
-		}
-	}
-	if to := c.Query("createdAtTo"); to != "" {
-		if t, err := time.Parse("2006-01-02", to); err == nil {
-			end := t.Add(24*time.Hour - time.Second)
-			createdAtTo = &end
-		}
-	}
+	createdAtFrom, createdAtTo := ParseChinaDateRange(c, "createdAtFrom", "createdAtTo")
 	return service.RechargeOrderFilter{
 		AppID:             QueryInt64(c, "appId", 0),
 		OrderNo:           TrimQuery(c, "orderNo"),
@@ -175,7 +164,7 @@ func ExportRechargeOrders(c *gin.Context) {
 		}
 	}
 
-	filename := fmt.Sprintf("recharge-orders-%s.xlsx", time.Now().Format("20060102150405"))
+	filename := fmt.Sprintf("recharge-orders-%s.xlsx", datetime.ChinaNow().Format("20060102150405"))
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	if err := f.Write(c.Writer); err != nil {
@@ -306,9 +295,9 @@ func rechargeColumnValue(col string, it service.RechargeOrderItem) interface{} {
 	case "payStatus":
 		return payStatusLabel(it.PayStatus)
 	case "createdAt":
-		return it.CreatedAt
+		return datetime.FormatChinaSecond(it.CreatedAt)
 	case "paidAt":
-		return it.PaidAt
+		return datetime.FormatChinaSecond(it.PaidAt)
 	case "orderNo":
 		return it.OrderNo
 	case "thirdPartyOrderNo":

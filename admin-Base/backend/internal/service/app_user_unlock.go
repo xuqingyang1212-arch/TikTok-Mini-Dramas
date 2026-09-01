@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 )
 
 type unlockRecordRow struct {
@@ -83,7 +84,6 @@ func (s *appUserService) queryUnlockRecords(appID, userID int64, limit, offset i
 		}
 	}
 
-	const layout = "2006-01-02 15:04:05"
 	items := make([]AppUserUnlockRecord, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, AppUserUnlockRecord{
@@ -92,7 +92,7 @@ func (s *appUserService) queryUnlockRecords(appID, userID int64, limit, offset i
 			UnlockCount: row.UnlockCount,
 			Episodes:    decodeEpisodes(row.EpisodeList),
 			BeansCost:   row.BeansCost,
-			UnlockedAt:  row.UnlockedAt.Format(layout),
+			UnlockedAt:  datetime.FormatUTC(row.UnlockedAt),
 			OrderNo:     row.OrderNo,
 			AdSessionNo: row.AdSessionNo,
 		})

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, type ReactNode } from "react"
-import { X } from "lucide-react"
+import { toast } from "@/lib/toast"
 
 export interface PopconfirmProps {
   title: string
@@ -37,15 +37,31 @@ export function Popconfirm({
         setOpen(false)
       }
     }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (open && e.key === "Escape") {
+        e.stopImmediatePropagation()
+        setOpen(false)
+      }
+    }
+
     document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
+    document.addEventListener("keydown", handleKeyDown, true)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown, true)
+    }
   }, [open])
 
   async function handleConfirm() {
+    if (loading) return
     setLoading(true)
     try {
       await onConfirm()
       setOpen(false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "操作失败"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -57,6 +73,8 @@ export function Popconfirm({
       {open && (
         <div
           ref={popoverRef}
+          role="dialog"
+          aria-modal="false"
           className="absolute right-0 top-full z-[100] mt-1 w-max min-w-[220px] max-w-[280px] rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-lg"
         >
           <div className="flex items-start gap-2">
@@ -72,12 +90,14 @@ export function Popconfirm({
           </div>
           <div className="mt-3 flex items-center justify-end gap-2">
             <button
+              type="button"
               onClick={() => setOpen(false)}
               className="h-[26px] rounded-[5px] border border-[#d1d5db] bg-white px-3 text-[12px] text-[#374151] transition-colors hover:bg-[#f5f6f7]"
             >
               {cancelText}
             </button>
             <button
+              type="button"
               onClick={handleConfirm}
               disabled={loading}
               className="h-[26px] rounded-[5px] bg-[#ef4444] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#dc2626] disabled:opacity-50"

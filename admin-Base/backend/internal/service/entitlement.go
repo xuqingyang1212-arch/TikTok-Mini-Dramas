@@ -3,9 +3,9 @@ package service
 import (
 	"errors"
 	"strings"
-	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -173,7 +173,7 @@ func normalizedUnlockType(unlockType string) string {
 func hasActiveSubscription(db *gorm.DB, appID, userID int64) (bool, error) {
 	var count int64
 	err := db.Model(&model.UserSubscription{}).
-		Where("app_id = ? AND user_id = ? AND status = ? AND expire_at > ?", appID, userID, "active", time.Now()).
+		Where("app_id = ? AND user_id = ? AND status = ? AND expire_at > ?", appID, userID, "active", datetime.NowUTC()).
 		Count(&count).Error
 	return count > 0, err
 }

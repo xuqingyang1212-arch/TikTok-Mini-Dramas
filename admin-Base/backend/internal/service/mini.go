@@ -3,9 +3,9 @@ package service
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
@@ -97,7 +97,7 @@ type MiniWatchReportResult struct {
 	DramaID    string `json:"dramaId"`
 	EpisodeNo  int    `json:"episodeNo"`
 	UnlockType string `json:"unlockType"` // free/beans/subscription/ad/locked
-	WatchedAt  string `json:"watchedAt"`  // 2006-01-02 15:04:05
+	WatchedAt  string `json:"watchedAt"`  // YYYY-MM-DDTHH:mm:ss.SSSZ
 }
 
 // ─── Interface ──────────────────────────────────────────────────────────────
@@ -304,7 +304,7 @@ func (s *miniService) subStatus(userID int64) MiniSubscriptionStatus {
 	st := s.payment.SubscriptionStatus(userID)
 	out := MiniSubscriptionStatus{Active: st.Active, Period: st.Period}
 	if st.Active && st.ExpireAt != nil {
-		out.ExpireAt = st.ExpireAt.Format(time.RFC3339)
+		out.ExpireAt = datetime.FormatUTC(*st.ExpireAt)
 	}
 	return out
 }
@@ -383,7 +383,7 @@ func (s *miniService) ReportWatch(userID, dramaID int64, episodeNo int) (*MiniWa
 		return nil, ErrEpisodeLocked
 	}
 
-	now := time.Now()
+	now := datetime.NowUTC()
 	logEntry := model.WatchLog{
 		ID:         snowflake.NextID(),
 		AppID:      user.AppID,
@@ -403,7 +403,7 @@ func (s *miniService) ReportWatch(userID, dramaID int64, episodeNo int) (*MiniWa
 		DramaID:    fmt.Sprintf("%d", dramaID),
 		EpisodeNo:  episodeNo,
 		UnlockType: unlockType,
-		WatchedAt:  now.Format("2006-01-02 15:04:05"),
+		WatchedAt:  datetime.FormatUTC(now),
 	}, nil
 }
 
@@ -417,7 +417,7 @@ func (s *miniService) GetUserProfile(userID int64) (*MiniUserProfile, error) {
 	profile := &MiniUserProfile{
 		UserID:       fmt.Sprintf("%d", user.ID),
 		OpenID:       user.OpenID,
-		CreatedAt:    user.CreatedAt.Format(time.RFC3339),
+		CreatedAt:    datetime.FormatUTC(user.CreatedAt),
 		Subscription: s.subStatus(user.ID),
 	}
 

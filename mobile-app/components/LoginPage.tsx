@@ -7,7 +7,24 @@ import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/I18nProvider"
 
 interface LoginPageProps {
-  onLogin: (userId: string, appName: string) => void
+  onLogin: (userId: string, app: AppInfo) => void
+}
+
+function MonetizationBadge({ type }: { type?: AppInfo["monetizationType"] }) {
+  if (!type) return null
+
+  return (
+    <span
+      className={cn(
+        "inline-flex flex-shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold leading-none",
+        type === "IAA"
+          ? "border-sky-400/25 bg-sky-400/10 text-sky-300"
+          : "border-[#ff8a34]/30 bg-[#ff8a34]/10 text-[#ffad70]"
+      )}
+    >
+      {type}
+    </span>
+  )
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
@@ -22,7 +39,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    miniApi.getApps().then((res) => {
+    const controller = new AbortController()
+
+    miniApi.getApps({ signal: controller.signal }).then((res) => {
+      if (controller.signal.aborted) return
       const list = res.list || []
       setApps(list)
       if (list.length > 0) {
@@ -30,9 +50,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
       setLoading(false)
     }).catch(() => {
+      if (controller.signal.aborted) return
       setError(t("login.loadAppsFailed"))
       setLoading(false)
     })
+
+    return () => controller.abort()
   }, [t])
 
   // Close dropdown when clicking outside
@@ -55,7 +78,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   const handleLogin = async () => {
-    if (!selectedApp || !openId.trim()) {
+    if (!selectedAppInfo || !openId.trim()) {
       setError(t("login.missingFields"))
       return
     }
@@ -65,8 +88,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
     try {
       const result = await miniApi.login(selectedApp, openId.trim())
-      const appName = selectedAppInfo?.name || "Mini Drama"
-      onLogin(result.userId, appName)
+      onLogin(result.userId, selectedAppInfo)
     } catch (err: any) {
       setError(err.message || t("login.failed"))
     } finally {
@@ -113,7 +135,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 showDropdown ? "border-[#ff8a34]/55" : "border-white/10"
               )}
             >
-              <span className="text-white">{selectedAppName}</span>
+              <span className="flex min-w-0 items-center gap-2 text-white">
+                <span className="truncate">{selectedAppName}</span>
+                <MonetizationBadge type={selectedAppInfo?.monetizationType} />
+              </span>
               <ChevronDown 
                 size={20} 
                 className={cn(
@@ -138,9 +163,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                         : "text-white/80 active:bg-white/5"
                     )}
                   >
-                    <span>{app.name}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{app.name}</span>
+                      <MonetizationBadge type={app.monetizationType} />
+                    </span>
                     {app.clientKey === selectedApp && (
-                      <Check size={18} className="text-[#ff8a34]" />
+                      <Check size={18} className="ml-3 flex-shrink-0 text-[#ff8a34]" />
                     )}
                   </button>
                 ))}

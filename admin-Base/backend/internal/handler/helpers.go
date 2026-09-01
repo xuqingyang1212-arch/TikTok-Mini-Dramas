@@ -3,7 +3,9 @@ package handler
 import (
 	"strconv"
 	"strings"
+	"time"
 
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
@@ -60,4 +62,9 @@ func QueryInt64(c *gin.Context, key string, def int64) int64 {
 		return def
 	}
 	return v
+}
+
+// ParseChinaDateRange interprets admin date filters in the China operating timezone.
+func ParseChinaDateRange(c *gin.Context, fromKey, toKey string) (from, toExclusive *time.Time) {
+	return datetime.ParseChinaDateRange(c.Query(fromKey), c.Query(toKey))
 }

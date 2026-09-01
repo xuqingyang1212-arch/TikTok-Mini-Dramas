@@ -61,6 +61,7 @@ type SubscriptionService interface {
 
 var (
 	ErrSubscriptionPlanNotFound = errors.New("subscription plan not found")
+	ErrSubscriptionTierRequired = errors.New("tier_id不能为空")
 	ErrDuplicatePeriod          = errors.New("该小程序已存在相同订阅周期的配置")
 	ErrDuplicateTierID          = errors.New("该小程序已存在相同tier_id的配置")
 )
@@ -143,6 +144,10 @@ func (s *subscriptionService) GetByID(id int64) (*model.SubscriptionPlan, error)
 }
 
 func (s *subscriptionService) Create(in CreateSubscriptionPlanInput) (*model.SubscriptionPlan, error) {
+	in.TierID = strings.TrimSpace(in.TierID)
+	if in.TierID == "" {
+		return nil, ErrSubscriptionTierRequired
+	}
 	// 校验同一小程序下订阅周期唯一
 	var count int64
 	if err := s.db.Model(&model.SubscriptionPlan{}).
@@ -177,12 +182,29 @@ func (s *subscriptionService) Create(in CreateSubscriptionPlanInput) (*model.Sub
 		Status:      "启用",
 	}
 	if err := s.db.Create(&plan).Error; err != nil {
+		if isDuplicate(err) {
+			var duplicatePeriod int64
+			if lookupErr := s.db.Model(&model.SubscriptionPlan{}).
+				Where("app_id = ? AND period = ?", in.AppID, in.Period).
+				Count(&duplicatePeriod).Error; lookupErr == nil && duplicatePeriod > 0 {
+				return nil, ErrDuplicatePeriod
+			}
+			return nil, ErrDuplicateTierID
+		}
 		return nil, err
 	}
 	return &plan, nil
 }
 
 func (s *subscriptionService) Update(id int64, in UpdateSubscriptionPlanInput) error {
+	if in.TierID != nil {
+		tierID := strings.TrimSpace(*in.TierID)
+		if tierID == "" {
+			return ErrSubscriptionTierRequired
+		}
+		in.TierID = &tierID
+	}
+
 	plan, err := s.GetByID(id)
 	if err != nil {
 		return err
@@ -205,7 +227,7 @@ func (s *subscriptionService) Update(id int64, in UpdateSubscriptionPlanInput) e
 	}
 
 	// 如果要更新 tier_id，校验唯一性
-	if in.TierID != nil && strings.TrimSpace(*in.TierID) != "" {
+	if in.TierID != nil {
 		var count int64
 		if err := s.db.Model(&model.SubscriptionPlan{}).
 			Where("app_id = ? AND tier_id = ? AND id != ?", plan.AppID, *in.TierID, id).
@@ -216,8 +238,6 @@ func (s *subscriptionService) Update(id int64, in UpdateSubscriptionPlanInput) e
 			return ErrDuplicateTierID
 		}
 		updates["tier_id"] = *in.TierID
-	} else if in.TierID != nil {
-		updates["tier_id"] = ""
 	}
 
 	if in.ApplePrice != nil {
@@ -233,7 +253,21 @@ func (s *subscriptionService) Update(id int64, in UpdateSubscriptionPlanInput) e
 	if len(updates) == 0 {
 		return nil
 	}
-	return s.db.Model(plan).Updates(updates).Error
+	if err := s.db.Model(plan).Updates(updates).Error; err != nil {
+		if isDuplicate(err) {
+			if in.Period != nil {
+				var duplicatePeriod int64
+				if lookupErr := s.db.Model(&model.SubscriptionPlan{}).
+					Where("app_id = ? AND period = ? AND id != ?", plan.AppID, *in.Period, id).
+					Count(&duplicatePeriod).Error; lookupErr == nil && duplicatePeriod > 0 {
+					return ErrDuplicatePeriod
+				}
+			}
+			return ErrDuplicateTierID
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *subscriptionService) Delete(id int64) error {

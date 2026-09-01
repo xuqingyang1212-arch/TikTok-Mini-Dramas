@@ -8,10 +8,12 @@ import (
 	"sort"
 	"strings"
 
+	"scaffold-admin/internal/config"
 	"scaffold-admin/internal/model"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -62,20 +64,15 @@ var (
 	ErrEpisodeNotLast       = errors.New("only the last episode can be deleted")
 )
 
-// MediaStorageDir is the external directory for new media files
-const MediaStorageDir = "/Users/xuqingyang/Documents/cursor文件/媒体文件存储/tiktok mini drama"
-
-// deleteMediaFile removes a media file from disk
-// Supports both old /uploads/... paths and new /media/... paths
+// deleteMediaFile removes a media file from disk.
+// Supports both legacy /uploads/... paths and current /media/... paths.
 func deleteMediaFile(urlPath string) {
 	if urlPath == "" {
 		return
 	}
 	var localPath string
 	if strings.HasPrefix(urlPath, "/media/") {
-		// New path: /media/videos/2026/08/03/xxx.mp4
-		// Local: MediaStorageDir + /videos/2026/08/03/xxx.mp4
-		localPath = filepath.Join(MediaStorageDir, strings.TrimPrefix(urlPath, "/media"))
+		localPath = filepath.Join(config.MediaStorageDir(), strings.TrimPrefix(urlPath, "/media"))
 	} else if strings.HasPrefix(urlPath, "/uploads/") {
 		// Legacy path: /uploads/videos/2026/07/31/xxx.mp4
 		// Local: ./uploads/videos/2026/07/31/xxx.mp4
@@ -117,35 +114,35 @@ func (s *episodeService) ListByDrama(dramaID int64) ([]EpisodeItem, error) {
 	return items, nil
 }
 
-func (s *episodeService) getMaxEpisodeNo(dramaID int64) (int, error) {
+func getMaxEpisodeNo(db *gorm.DB, dramaID int64) (int, error) {
 	var maxNo int
-	err := s.db.Model(&model.Episode{}).
+	err := db.Model(&model.Episode{}).
 		Where("drama_id = ?", dramaID).
 		Select("COALESCE(MAX(episode_no), 0)").
 		Scan(&maxNo).Error
 	return maxNo, err
 }
 
-func (s *episodeService) updateDramaEpisodeCount(dramaID int64) error {
+func updateDramaEpisodeCount(db *gorm.DB, dramaID int64) error {
 	var count int64
-	if err := s.db.Model(&model.Episode{}).Where("drama_id = ?", dramaID).Count(&count).Error; err != nil {
+	if err := db.Model(&model.Episode{}).Where("drama_id = ?", dramaID).Count(&count).Error; err != nil {
 		return err
 	}
-	return s.db.Model(&model.Drama{}).Where("id = ?", dramaID).Update("episode_count", count).Error
+	return db.Model(&model.Drama{}).Where("id = ?", dramaID).Update("episode_count", count).Error
+}
+
+func lockDrama(db *gorm.DB, dramaID int64) error {
+	var drama model.Drama
+	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&drama, dramaID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrDramaNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *episodeService) Create(input CreateEpisodeInput) (*model.Episode, error) {
-	// Check if episode number already exists
-	var exists int64
-	if err := s.db.Model(&model.Episode{}).
-		Where("drama_id = ? AND episode_no = ?", input.DramaID, input.EpisodeNo).
-		Count(&exists).Error; err != nil {
-		return nil, err
-	}
-	if exists > 0 {
-		return nil, ErrEpisodeDuplicate
-	}
-
 	episode := model.Episode{
 		ID:        snowflake.NextID(),
 		DramaID:   input.DramaID,
@@ -154,15 +151,21 @@ func (s *episodeService) Create(input CreateEpisodeInput) (*model.Episode, error
 		Duration:  input.Duration,
 		FileSize:  input.FileSize,
 	}
-	if err := s.db.Create(&episode).Error; err != nil {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockDrama(tx, input.DramaID); err != nil {
+			return err
+		}
+		if err := tx.Create(&episode).Error; err != nil {
+			if isDuplicate(err) {
+				return ErrEpisodeDuplicate
+			}
+			return err
+		}
+		return updateDramaEpisodeCount(tx, input.DramaID)
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	// Update drama episode count
-	if err := s.updateDramaEpisodeCount(input.DramaID); err != nil {
-		return nil, err
-	}
-
 	return &episode, nil
 }
 
@@ -171,31 +174,29 @@ func (s *episodeService) BatchCreate(input BatchCreateEpisodeInput) ([]EpisodeIt
 		return nil, errors.New("no episodes to create")
 	}
 
-	// Get current max episode number
-	maxNo, err := s.getMaxEpisodeNo(input.DramaID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort episodes by episode number
+	// Sort episodes by episode number before validating inside the transaction.
 	episodes := make([]EpisodeUpload, len(input.Episodes))
 	copy(episodes, input.Episodes)
 	sort.Slice(episodes, func(i, j int) bool {
 		return episodes[i].EpisodeNo < episodes[j].EpisodeNo
 	})
 
-	// Validate continuity: must start from maxNo+1 and be continuous
-	expectedNo := maxNo + 1
-	for _, ep := range episodes {
-		if ep.EpisodeNo != expectedNo {
-			return nil, fmt.Errorf("%w: expected episode %d, got %d", ErrEpisodeNonContinuous, expectedNo, ep.EpisodeNo)
-		}
-		expectedNo++
-	}
-
-	// Create episodes in transaction
 	var created []model.Episode
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockDrama(tx, input.DramaID); err != nil {
+			return err
+		}
+		maxNo, err := getMaxEpisodeNo(tx, input.DramaID)
+		if err != nil {
+			return err
+		}
+		expectedNo := maxNo + 1
+		for _, ep := range episodes {
+			if ep.EpisodeNo != expectedNo {
+				return fmt.Errorf("%w: expected episode %d, got %d", ErrEpisodeNonContinuous, expectedNo, ep.EpisodeNo)
+			}
+			expectedNo++
+		}
 		for _, ep := range episodes {
 			episode := model.Episode{
 				ID:        snowflake.NextID(),
@@ -206,18 +207,16 @@ func (s *episodeService) BatchCreate(input BatchCreateEpisodeInput) ([]EpisodeIt
 				FileSize:  ep.FileSize,
 			}
 			if err := tx.Create(&episode).Error; err != nil {
+				if isDuplicate(err) {
+					return ErrEpisodeDuplicate
+				}
 				return err
 			}
 			created = append(created, episode)
 		}
-		return nil
+		return updateDramaEpisodeCount(tx, input.DramaID)
 	})
 	if err != nil {
-		return nil, err
-	}
-
-	// Update drama episode count
-	if err := s.updateDramaEpisodeCount(input.DramaID); err != nil {
 		return nil, err
 	}
 
@@ -265,34 +264,43 @@ func (s *episodeService) Update(id int64, videoURL string, duration int, fileSiz
 }
 
 func (s *episodeService) Delete(id int64) error {
-	var episode model.Episode
-	if err := s.db.First(&episode, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrEpisodeNotFound
+	var deleted model.Episode
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var episode model.Episode
+		if err := tx.First(&episode, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrEpisodeNotFound
+			}
+			return err
 		}
-		return err
-	}
-
-	// 只允许删除最后一集，保证集数连续、不留空洞。
-	maxNo, err := s.getMaxEpisodeNo(episode.DramaID)
+		if err := lockDrama(tx, episode.DramaID); err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&episode, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrEpisodeNotFound
+			}
+			return err
+		}
+		maxNo, err := getMaxEpisodeNo(tx, episode.DramaID)
+		if err != nil {
+			return err
+		}
+		if episode.EpisodeNo != maxNo {
+			return ErrEpisodeNotLast
+		}
+		if err := tx.Delete(&episode).Error; err != nil {
+			return err
+		}
+		if err := updateDramaEpisodeCount(tx, episode.DramaID); err != nil {
+			return err
+		}
+		deleted = episode
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	if episode.EpisodeNo != maxNo {
-		return ErrEpisodeNotLast
-	}
-
-	// Store video URL before deleting from DB
-	videoURL := episode.VideoURL
-	dramaID := episode.DramaID
-
-	if err := s.db.Delete(&episode).Error; err != nil {
-		return err
-	}
-
-	// Delete video file from disk
-	deleteMediaFile(videoURL)
-
-	// Update drama episode count
-	return s.updateDramaEpisodeCount(dramaID)
+	deleteMediaFile(deleted.VideoURL)
+	return nil
 }

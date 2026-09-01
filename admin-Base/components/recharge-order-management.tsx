@@ -6,11 +6,13 @@ import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
 import { FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, type DateRangeValue, StatusBadge, type StatusStyleConfig, FixedHeaderTable, thClass, ColumnSettings } from "@/components/shared"
 import { useColumnSettings, type ColumnDef } from "@/hooks/use-column-settings"
-import { rechargeOrderApi, appApi, type RechargeOrderItem } from "@/lib/api"
+import { rechargeOrderApi, type RechargeOrderItem } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { useAppOptions } from "@/hooks/use-app-options"
+import { usePagedQuery } from "@/hooks/use-paged-query"
 
 interface FilterForm {
   appId: string
@@ -182,11 +184,9 @@ export default function RechargeOrderManagement() {
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
 
-  const [data, setData] = useState<RechargeOrderItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [appOptions, setAppOptions] = useState<{ label: string; value: string }[]>([])
   const [exporting, setExporting] = useState(false)
+  const { options: rawAppOptions } = useAppOptions(100)
+  const appOptions = rawAppOptions.map((app) => ({ label: app.name, value: String(app.id) }))
 
   // 自定义列展示：勾选结果持久化到 localStorage（按登录用户隔离）。
   const colSettings = useColumnSettings("recharge-order", ALL_COLUMNS)
@@ -196,12 +196,6 @@ export default function RechargeOrderManagement() {
   const visibleColumns = colSettings.visibleKeys
     .map((k) => columnByKey.get(k))
     .filter((c): c is OrderColumn => !!c)
-
-  useEffect(() => {
-    appApi.list({ page: 1, pageSize: 100 }).then((res) => {
-      setAppOptions((res.list || []).map((app: any) => ({ label: app.name, value: String(app.id) })))
-    }).catch(() => {})
-  }, [])
 
   // 列表/导出共用的筛选参数（不含分页）
   const buildFilterParams = useCallback(() => ({
@@ -217,26 +211,22 @@ export default function RechargeOrderManagement() {
     createdAtTo: activeFilters.createdAtRange[1] || undefined,
   }), [activeFilters])
 
-  const fetchList = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await rechargeOrderApi.list<RechargeOrderItem>({
-        page: currentPage,
-        pageSize,
-        ...buildFilterParams(),
-      })
-      setData(res.list || [])
-      setTotal(res.total ?? 0)
-    } catch {
-      setData([])
-      setTotal(0)
-      toast.error("加载失败")
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage, pageSize, buildFilterParams])
+  const fetchList = useCallback(({ page, pageSize }: { page: number; pageSize: number }) => (
+    rechargeOrderApi.list<RechargeOrderItem>({
+      page,
+      pageSize,
+      ...buildFilterParams(),
+    })
+  ), [buildFilterParams])
+  const { data, total, loading, error: listError } = usePagedQuery({
+    page: currentPage,
+    pageSize,
+    fetcher: fetchList,
+  })
 
-  useEffect(() => { void fetchList() }, [fetchList])
+  useEffect(() => {
+    if (listError) toast.error(listError)
+  }, [listError])
 
   function handleQuery() { applyFilters(); resetPage() }
   function handleReset() { resetFilters(); resetPage() }

@@ -1,9 +1,8 @@
 package service
 
 import (
-	"time"
-
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 )
 
 // HasActiveSubscription 便捷方法：根据 userID 自动解析 appID
@@ -23,7 +22,7 @@ func (s *miniPaymentService) SubscriptionStatus(userID int64) SubscriptionStatus
 	}
 	var sub model.UserSubscription
 	err = s.db.Where("app_id = ? AND user_id = ? AND status = ? AND expire_at > ?",
-		u.AppID, userID, "active", time.Now()).
+		u.AppID, userID, "active", datetime.NowUTC()).
 		Order("expire_at DESC").First(&sub).Error
 	if err != nil {
 		return SubscriptionStatusOut{}

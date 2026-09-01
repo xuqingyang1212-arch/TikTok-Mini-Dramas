@@ -1,6 +1,8 @@
 package service
 
 import (
+	"encoding/json"
+
 	"scaffold-admin/internal/model"
 	"scaffold-admin/internal/pkg/snowflake"
 
@@ -27,17 +29,43 @@ func (s *miniPaymentService) CreateSubscriptionOrder(userID, planID, dramaID int
 			return ErrPlanNotFound
 		}
 
+		normalizedOS := normalizeDeviceOS(deviceOS)
+		amount := plan.ApplePrice
+		if normalizedOS == "Google" {
+			amount = plan.GooglePrice
+		}
+		planSnapshot, err := json.Marshal(struct {
+			Period      string  `json:"period"`
+			ApplePrice  float64 `json:"applePrice"`
+			GooglePrice float64 `json:"googlePrice"`
+			WebDiscount int     `json:"webDiscount"`
+			TierID      string  `json:"tierId"`
+		}{
+			Period:      plan.Period,
+			ApplePrice:  plan.ApplePrice,
+			GooglePrice: plan.GooglePrice,
+			WebDiscount: plan.WebDiscount,
+			TierID:      plan.TierID,
+		})
+		if err != nil {
+			return err
+		}
+
 		order := model.PaymentOrder{
-			ID:        snowflake.NextID(),
-			OrderNo:   genOrderNo(),
-			AppID:     u.AppID,
-			UserID:    userID,
-			OrderType: "subscription",
-			DramaID:   dramaID,
-			PlanID:    plan.ID,
-			Period:    plan.Period,
-			DeviceOS:  normalizeDeviceOS(deviceOS),
-			PayStatus: "pending",
+			ID:           snowflake.NextID(),
+			OrderNo:      genOrderNo(),
+			AppID:        u.AppID,
+			UserID:       userID,
+			OrderType:    "subscription",
+			DramaID:      dramaID,
+			PlanID:       plan.ID,
+			Period:       plan.Period,
+			Amount:       amount,
+			Currency:     "USD",
+			PlanTierID:   plan.TierID,
+			PlanSnapshot: string(planSnapshot),
+			DeviceOS:     normalizedOS,
+			PayStatus:    "pending",
 		}
 		if err := tx.Create(&order).Error; err != nil {
 			return err

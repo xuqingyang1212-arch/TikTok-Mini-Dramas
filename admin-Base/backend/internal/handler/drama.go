@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"time"
-
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/service"
 
@@ -15,18 +13,7 @@ func ListDramas(c *gin.Context) {
 	page := QueryInt(c, "page", 1)
 	pageSize := QueryInt(c, "pageSize", 20)
 
-	var createdAtFrom, createdAtTo *time.Time
-	if from := c.Query("createdAtFrom"); from != "" {
-		if t, err := time.Parse("2006-01-02", from); err == nil {
-			createdAtFrom = &t
-		}
-	}
-	if to := c.Query("createdAtTo"); to != "" {
-		if t, err := time.Parse("2006-01-02", to); err == nil {
-			end := t.Add(24*time.Hour - time.Second)
-			createdAtTo = &end
-		}
-	}
+	createdAtFrom, createdAtTo := ParseChinaDateRange(c, "createdAtFrom", "createdAtTo")
 
 	filter := service.DramaListFilter{
 		DramaID:       TrimQuery(c, "dramaId"),

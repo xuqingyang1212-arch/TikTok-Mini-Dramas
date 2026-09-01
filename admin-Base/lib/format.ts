@@ -5,16 +5,26 @@ export function formatFileSize(bytes: number, emptyDisplay = ""): string {
 }
 
 /**
- * Format a date value to `YYYY-MM-DD HH:mm:ss` in UTC+8.
- * Accepts ISO strings, Date objects, or timestamps.
- * Returns empty string for falsy input, raw string for unparseable values.
+ * Format a date value to `YYYY-MM-DD HH:mm:ss` in the China operating timezone.
+ * API timestamps are UTC; milliseconds remain in storage but are intentionally hidden here.
  */
 export function formatDateTime(value: string | number | Date | undefined | null): string {
   if (value == null || value === "") return ""
-  const d = value instanceof Date ? value : new Date(value as string | number)
-  if (Number.isNaN(d.getTime())) return String(value)
-  const utc = d.getTime() + d.getTimezoneOffset() * 60_000
-  const cn = new Date(utc + 8 * 3600_000)
-  const p = (n: number) => String(n).padStart(2, "0")
-  return `${cn.getFullYear()}-${p(cn.getMonth() + 1)}-${p(cn.getDate())} ${p(cn.getHours())}:${p(cn.getMinutes())}:${p(cn.getSeconds())}`
+  const date = value instanceof Date ? value : new Date(value as string | number)
+  if (Number.isNaN(date.getTime())) return String(value)
+
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
+  const valueOf = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? ""
+
+  return `${valueOf("year")}-${valueOf("month")}-${valueOf("day")} ${valueOf("hour")}:${valueOf("minute")}:${valueOf("second")}`
 }

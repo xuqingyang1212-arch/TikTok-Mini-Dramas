@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
@@ -78,7 +79,7 @@ func (s *miniPaymentService) CreateUnlockOrder(userID, dramaID int64, tierKey, d
 
 		var activeSubscriptionCount int64
 		if err := tx.Model(&model.UserSubscription{}).
-			Where("app_id = ? AND user_id = ? AND status = ? AND expire_at > ?", u.AppID, userID, "active", time.Now()).
+			Where("app_id = ? AND user_id = ? AND status = ? AND expire_at > ?", u.AppID, userID, "active", datetime.NowUTC()).
 			Count(&activeSubscriptionCount).Error; err != nil {
 			return err
 		}
@@ -123,7 +124,10 @@ func (s *miniPaymentService) CreateUnlockOrder(userID, dramaID int64, tierKey, d
 		target := locked[:take]
 
 		beansPerEp, err := s.payConfig.GetEffectiveConfig(u.AppID, dramaID)
-		if err != nil || beansPerEp < 1 {
+		if err != nil {
+			return err
+		}
+		if beansPerEp < 1 {
 			beansPerEp = 100
 		}
 

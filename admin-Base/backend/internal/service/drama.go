@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
@@ -25,14 +26,14 @@ type DramaListFilter struct {
 }
 
 type DramaListItem struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	CoverURL       string    `json:"coverUrl"`
-	Language       string    `json:"language"`
-	EpisodeCount   int       `json:"episodeCount"`
-	PaywallEpisode int       `json:"paywallEpisode"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"createdAt"`
+	ID             string        `json:"id"`
+	Name           string        `json:"name"`
+	CoverURL       string        `json:"coverUrl"`
+	Language       string        `json:"language"`
+	EpisodeCount   int           `json:"episodeCount"`
+	PaywallEpisode int           `json:"paywallEpisode"`
+	Status         string        `json:"status"`
+	CreatedAt      datetime.Time `json:"createdAt"`
 }
 
 type CreateDramaInput struct {
@@ -91,7 +92,7 @@ func (s *dramaService) List(f DramaListFilter) ([]DramaListItem, int64, error) {
 		db = db.Where("created_at >= ?", f.CreatedAtFrom)
 	}
 	if f.CreatedAtTo != nil {
-		db = db.Where("created_at <= ?", f.CreatedAtTo)
+		db = db.Where("created_at < ?", f.CreatedAtTo)
 	}
 
 	var total int64
@@ -119,7 +120,7 @@ func (s *dramaService) List(f DramaListFilter) ([]DramaListItem, int64, error) {
 			EpisodeCount:   d.EpisodeCount,
 			PaywallEpisode: d.PaywallEpisode,
 			Status:         d.Status,
-			CreatedAt:      d.CreatedAt,
+			CreatedAt:      datetime.From(d.CreatedAt),
 		}
 	}
 	return items, total, nil

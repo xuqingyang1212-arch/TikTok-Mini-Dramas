@@ -54,6 +54,14 @@ type StorageConfig struct {
 	OSS   OSSConfig          `yaml:"oss"`
 }
 
+// MediaStorageDir returns the configured local media directory.
+func MediaStorageDir() string {
+	if dir := Global.Storage.Local.UploadDir; dir != "" {
+		return dir
+	}
+	return "./uploads"
+}
+
 type LocalStorageConfig struct {
 	UploadDir string `yaml:"upload_dir"`
 	BaseURL   string `yaml:"base_url"`
@@ -77,10 +85,10 @@ func IsDemoMode() bool {
 func (d *DatabaseConfig) DSN() string {
 	if d.Socket != "" {
 		// Unix socket: user:password@unix(/path/to/socket)/dbname?charset=...
-		return d.User + ":" + d.Password + "@unix(" + d.Socket + ")/" + d.DBName + "?charset=" + d.Charset + "&parseTime=True&loc=Local"
+		return d.User + ":" + d.Password + "@unix(" + d.Socket + ")/" + d.DBName + "?charset=" + d.Charset + "&parseTime=True&loc=UTC&time_zone=%27%2B00%3A00%27"
 	}
 	// TCP: user:password@tcp(host:port)/dbname?charset=...
-	return d.User + ":" + d.Password + "@tcp(" + d.Host + ":" + strconv.Itoa(d.Port) + ")/" + d.DBName + "?charset=" + d.Charset + "&parseTime=True&loc=Local"
+	return d.User + ":" + d.Password + "@tcp(" + d.Host + ":" + strconv.Itoa(d.Port) + ")/" + d.DBName + "?charset=" + d.Charset + "&parseTime=True&loc=UTC&time_zone=%27%2B00%3A00%27"
 }
 
 var Global Config

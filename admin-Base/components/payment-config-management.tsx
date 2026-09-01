@@ -5,12 +5,15 @@ import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
 import { FilterInput, SelectFilter, RightDrawer, Popconfirm, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
-import { paymentConfigApi, appApi, dramaApi, type PaymentConfigItem } from "@/lib/api"
+import { paymentConfigApi, type PaymentConfigItem } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
 import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { useAppOptions } from "@/hooks/use-app-options"
+import { useDramaOptions } from "@/hooks/use-drama-options"
+import { usePagedQuery } from "@/hooks/use-paged-query"
 
 // ─────────────── Types ───────────────
 interface AppOption {
@@ -285,47 +288,33 @@ export default function PaymentConfigManagement() {
 
   const { draft: draftFilters, active: appliedFilters, update: setDraftField, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page, pageSize, resetPage, paginationProps } = usePagination()
+  const { options: rawAppOptions } = useAppOptions()
+  const { options: rawDramaOptions } = useDramaOptions()
+  const appOptions: AppOption[] = rawAppOptions.map((app) => ({ id: String(app.id), name: app.name }))
+  const dramaOptions: DramaOption[] = rawDramaOptions
 
-  const [list, setList] = useState<PaymentConfigItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [appOptions, setAppOptions] = useState<AppOption[]>([])
-  const [dramaOptions, setDramaOptions] = useState<DramaOption[]>([])
+  const fetchList = useCallback(({ page: queryPage, pageSize: queryPageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => (
+    paymentConfigApi.list<PaymentConfigItem>({
+      page: queryPage,
+      pageSize: queryPageSize,
+      appId: filters?.appId || undefined,
+      dramaId: filters?.dramaId || undefined,
+      configType: filters?.configType || undefined,
+    })
+  ), [])
+  const { data: list, total, loading, error: listError, refresh: refreshList } = usePagedQuery({
+    page,
+    pageSize,
+    filters: appliedFilters,
+    fetcher: fetchList,
+  })
 
   const [drawerMode, setDrawerMode] = useState<"add" | "edit" | null>(null)
   const [editingConfig, setEditingConfig] = useState<PaymentConfigItem | undefined>()
 
-  // 加载小程序和剧集列表
   useEffect(() => {
-    appApi.list({ pageSize: 1000 }).then((res) => {
-      setAppOptions(res.list.map((a: any) => ({ id: String(a.id), name: a.name })))
-    }).catch(() => {})
-
-    dramaApi.list({ pageSize: 1000 }).then((res) => {
-      setDramaOptions(res.list.map((d: any) => ({ id: String(d.id), name: d.name })))
-    }).catch(() => {})
-  }, [])
-
-  const fetchList = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await paymentConfigApi.list({
-        page,
-        pageSize,
-        appId: appliedFilters.appId || undefined,
-        dramaId: appliedFilters.dramaId || undefined,
-        configType: appliedFilters.configType || undefined,
-      })
-      setList(res.list)
-      setTotal(res.total)
-    } catch {
-      toast.error("加载失败")
-    } finally {
-      setLoading(false)
-    }
-  }, [page, pageSize, appliedFilters])
-
-  useEffect(() => { void fetchList() }, [fetchList])
+    if (listError) toast.error(listError)
+  }, [listError])
 
   function handleQuery() { applyFilters(); resetPage() }
   function handleReset() { resetFilters(); resetPage() }
@@ -344,7 +333,7 @@ export default function PaymentConfigManagement() {
     try {
       await paymentConfigApi.delete(row.id)
       toast.success("删除成功")
-      fetchList()
+      await refreshList()
     } catch (err: any) {
       toast.error(err.message || "删除失败")
     }
@@ -366,7 +355,7 @@ export default function PaymentConfigManagement() {
         toast.success("更新成功")
       }
       setDrawerMode(null)
-      fetchList()
+      await refreshList()
     } catch (err: any) {
       toast.error(err.message || "保存失败")
     }

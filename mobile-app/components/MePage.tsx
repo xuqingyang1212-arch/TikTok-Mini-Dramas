@@ -2,15 +2,21 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Check, ChevronRight, Copy, Globe2, Loader2, LogOut, ReceiptText, X } from "lucide-react"
-import { miniApi, type UserInfo } from "@/lib/api"
+import { miniApi, type AppInfo, type UserInfo } from "@/lib/api"
 import { VipDiamondIcon } from "./payment/VipDiamondIcon"
 import { useI18n } from "@/lib/i18n/I18nProvider"
 import type { Locale } from "@/lib/i18n/messages"
 
 interface MePageProps {
   userId: string
+  monetizationType?: AppInfo["monetizationType"]
   onOpenPurchaseRecords: () => void
   onLogout: () => void
+}
+
+function getBrowserTimeZone() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return timeZone || undefined
 }
 
 function formatExpireAt(expireAt: string | undefined, locale: Locale) {
@@ -19,6 +25,7 @@ function formatExpireAt(expireAt: string | undefined, locale: Locale) {
   if (Number.isNaN(date.getTime())) return expireAt
 
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    timeZone: getBrowserTimeZone(),
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -46,7 +53,7 @@ async function copyToClipboard(text: string) {
   if (!copied) throw new Error("Copy failed")
 }
 
-export function MePage({ userId, onOpenPurchaseRecords, onLogout }: MePageProps) {
+export function MePage({ userId, monetizationType, onOpenPurchaseRecords, onLogout }: MePageProps) {
   const { locale, setLocale, t } = useI18n()
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -56,27 +63,33 @@ export function MePage({ userId, onOpenPurchaseRecords, onLogout }: MePageProps)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
+
+    if (monetizationType !== "IAP") {
+      setUserInfo(null)
+      setLoading(false)
+      setLoadFailed(false)
+      return () => controller.abort()
+    }
 
     setLoading(true)
     setLoadFailed(false)
     miniApi
-      .getUser(userId)
+      .getUser(userId, { signal: controller.signal })
       .then((data) => {
-        if (!cancelled) setUserInfo(data)
+        if (!controller.signal.aborted) setUserInfo(data)
       })
       .catch((err) => {
+        if (controller.signal.aborted) return
         console.error("Failed to load user info:", err)
-        if (!cancelled) setLoadFailed(true)
+        setLoadFailed(true)
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       })
 
-    return () => {
-      cancelled = true
-    }
-  }, [userId])
+    return () => controller.abort()
+  }, [monetizationType, userId])
 
   useEffect(() => {
     return () => {
@@ -107,6 +120,7 @@ export function MePage({ userId, onOpenPurchaseRecords, onLogout }: MePageProps)
   const subscription = userInfo?.subscription
   const isVip = subscription?.active === true
   const expireText = formatExpireAt(subscription?.expireAt, locale)
+  const isIap = monetizationType === "IAP"
 
   return (
     <div className="flex h-full flex-col bg-black">
@@ -143,61 +157,65 @@ export function MePage({ userId, onOpenPurchaseRecords, onLogout }: MePageProps)
 
       {/* Menu list */}
       <div className="flex-1 overflow-y-auto hide-scrollbar pb-20">
-        {/* VIP Banner */}
-        <div
-          className={isVip
-            ? "vip-card vip-card--gold vip-card--recommended relative mx-4 mb-4 flex min-h-[104px] items-center overflow-hidden rounded-[18px] p-4"
-            : "profile-vip-card--inactive relative mx-4 mb-4 flex min-h-[104px] items-center overflow-hidden rounded-[18px] p-4"
-          }
-        >
-          {loading ? (
-            <div className="flex w-full items-center justify-center">
-              <Loader2 size={22} className="animate-spin text-white/65" />
-            </div>
-          ) : loadFailed ? (
-            <div className="flex w-full items-center gap-3">
-              <VipDiamondIcon theme="gold" className="h-14 w-14 flex-shrink-0 opacity-70" />
-              <div className="min-w-0">
-                <h3 className="text-[18px] font-bold text-white">{t("me.memberLoadFailed")}</h3>
-                <p className="mt-1 text-[14px] text-white/55">{t("me.memberLoadRetry")}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="relative flex w-full items-center gap-3">
-              <VipDiamondIcon
-                theme={isVip ? "gold" : "purple"}
-                crown
-                className="h-14 w-14 flex-shrink-0 drop-shadow-[0_3px_8px_rgba(0,0,0,0.3)]"
-              />
+        {isIap && (
+          <>
+            {/* VIP Banner */}
+            <div
+              className={isVip
+                ? "vip-card vip-card--gold vip-card--recommended relative mx-4 mb-4 flex min-h-[104px] items-center overflow-hidden rounded-[18px] p-4"
+                : "profile-vip-card--inactive relative mx-4 mb-4 flex min-h-[104px] items-center overflow-hidden rounded-[18px] p-4"
+              }
+            >
+              {loading ? (
+                <div className="flex w-full items-center justify-center">
+                  <Loader2 size={22} className="animate-spin text-white/65" />
+                </div>
+              ) : loadFailed ? (
+                <div className="flex w-full items-center gap-3">
+                  <VipDiamondIcon theme="gold" className="h-14 w-14 flex-shrink-0 opacity-70" />
+                  <div className="min-w-0">
+                    <h3 className="text-[18px] font-bold text-white">{t("me.memberLoadFailed")}</h3>
+                    <p className="mt-1 text-[14px] text-white/55">{t("me.memberLoadRetry")}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative flex w-full items-center gap-3">
+                  <VipDiamondIcon
+                    theme={isVip ? "gold" : "purple"}
+                    crown
+                    className="h-14 w-14 flex-shrink-0 drop-shadow-[0_3px_8px_rgba(0,0,0,0.3)]"
+                  />
 
-              <div className="min-w-0 flex-1">
-                <h3 className="truncate text-[20px] font-bold text-white">
-                  {isVip ? t("me.subscribed") : t("me.notSubscribed")}
-                </h3>
-                <p className={isVip ? "mt-1 truncate text-[14px] text-white/85" : "mt-1 truncate text-[14px] text-white/50"}>
-                  {isVip && expireText ? t("me.validUntil", { date: expireText }) : t("me.noActiveMember")}
-                </p>
-              </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-[20px] font-bold text-white">
+                      {isVip ? t("me.subscribed") : t("me.notSubscribed")}
+                    </h3>
+                    <p className={isVip ? "mt-1 truncate text-[14px] text-white/85" : "mt-1 truncate text-[14px] text-white/50"}>
+                      {isVip && expireText ? t("me.validUntil", { date: expireText }) : t("me.noActiveMember")}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Purchase records */}
-        <div className="mx-4 mt-2 overflow-hidden rounded-2xl border border-[#ff9b42]/25 bg-gradient-to-r from-[#211a15] via-[#1b1816] to-[#171717] shadow-[0_8px_24px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)]">
-          <button
-            type="button"
-            onClick={onOpenPurchaseRecords}
-            className="flex min-h-16 w-full items-center gap-3 px-4 text-left transition-colors active:bg-[#ff9b42]/[0.07]"
-          >
-            <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-[#ffad62]/25 bg-[#ff8a34]/18 text-[#ffad62] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-              <ReceiptText size={23} />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[17px] font-medium text-white">
-              {t("me.purchaseRecords")}
-            </span>
-            <ChevronRight size={20} className="flex-shrink-0 text-[#ffad62]/65" />
-          </button>
-        </div>
+            {/* Purchase records */}
+            <div className="mx-4 mt-2 overflow-hidden rounded-2xl border border-[#ff9b42]/25 bg-gradient-to-r from-[#211a15] via-[#1b1816] to-[#171717] shadow-[0_8px_24px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)]">
+              <button
+                type="button"
+                onClick={onOpenPurchaseRecords}
+                className="flex min-h-16 w-full items-center gap-3 px-4 text-left transition-colors active:bg-[#ff9b42]/[0.07]"
+              >
+                <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-[#ffad62]/25 bg-[#ff8a34]/18 text-[#ffad62] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                  <ReceiptText size={23} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[17px] font-medium text-white">
+                  {t("me.purchaseRecords")}
+                </span>
+                <ChevronRight size={20} className="flex-shrink-0 text-[#ffad62]/65" />
+              </button>
+            </div>
+          </>
+        )}
 
         {/* Language */}
         <div className="mx-4 mt-3 overflow-hidden rounded-2xl border border-[#ff9b42]/30 bg-gradient-to-r from-[#2a2019] via-[#211a16] to-[#191716] shadow-[0_8px_24px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,183,112,0.06)]">

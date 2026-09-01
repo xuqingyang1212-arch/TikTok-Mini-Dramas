@@ -73,9 +73,13 @@ type PaymentOrder struct {
 	UnlockCount int    `gorm:"default:0" json:"unlockCount"`
 	BeansCost   int    `gorm:"default:0" json:"beansCost"`
 
-	// 订阅类订单字段
-	PlanID int64  `gorm:"default:0" json:"planId"`
-	Period string `gorm:"size:32" json:"period"`
+	// 订阅类订单字段（金额与档位信息按下单时快照，避免后续配置变更改写历史订单）
+	PlanID       int64   `gorm:"default:0" json:"planId"`
+	Period       string  `gorm:"size:32" json:"period"`
+	Amount       float64 `gorm:"type:decimal(10,2);not null;default:0" json:"amount"`
+	Currency     string  `gorm:"size:8;not null;default:USD" json:"currency"`
+	PlanTierID   string  `gorm:"size:128" json:"planTierId"`
+	PlanSnapshot string  `gorm:"size:1024" json:"planSnapshot"`
 
 	// 第三方（TikTok）订单号，支付成功时回填，示例 TOID1732533244259
 	ThirdPartyOrderNo string `gorm:"size:64;index" json:"thirdPartyOrderNo"`

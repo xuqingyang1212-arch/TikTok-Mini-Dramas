@@ -22,12 +22,12 @@ USE tiktok_mini_drama;
 
 -- ─── 1. 超级管理员 角色 ──────────────────────────────────────────────────────
 INSERT INTO roles (name, remark, created_at, updated_at)
-VALUES ('超级管理员', '拥有所有权限', NOW(), NOW())
+VALUES ('超级管理员', '拥有所有权限', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))
 ON DUPLICATE KEY UPDATE name = name;
 
 -- ─── 2. 默认 admin 账号 ──────────────────────────────────────────────────────
 INSERT INTO users (name, email, status, created_at, updated_at)
-VALUES ('超级管理员', 'admin@admin.com', '启用', NOW(), NOW())
+VALUES ('超级管理员', 'admin@admin.com', '启用', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))
 ON DUPLICATE KEY UPDATE name = name;
 
 -- ─── 3. 把 admin 账号关联到 超级管理员 角色 ──────────────────────────────────

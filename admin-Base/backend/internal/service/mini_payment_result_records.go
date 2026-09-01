@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
@@ -52,7 +53,7 @@ func (s *miniPaymentService) SubmitPayResult(orderNo string, success bool) (*Min
 			if err := requireIAPApp(tx, order.AppID, true); err != nil {
 				return err
 			}
-			now := time.Now()
+			now := datetime.NowUTC()
 			res := tx.Model(&model.PaymentOrder{}).
 				Where("order_no = ? AND pay_status = ?", order.OrderNo, "pending").
 				Updates(map[string]interface{}{"pay_status": "failed", "updated_at": now})
@@ -82,7 +83,7 @@ func (s *miniPaymentService) SubmitPayResult(orderNo string, success bool) (*Min
 		if err := requireIAPApp(tx, order.AppID, true); err != nil {
 			return err
 		}
-		now := time.Now()
+		now := datetime.NowUTC()
 		// 只有抢占成功（RowsAffected==1）的那次才继续执行解锁/开通，杜绝并发双花。
 		paidAt := now
 		claim := tx.Model(&model.PaymentOrder{}).
@@ -192,11 +193,11 @@ func (s *miniPaymentService) PaymentRecords(userID int64) (*MiniPaymentRecords, 
 		return nil, err
 	}
 
-	// 预取订阅档位（用于按设备系统换算实付金额）与剧集名称
+	// 仅旧订单需要读取当前订阅档位作为兼容回退；新订单直接使用金额快照。
 	planIDs := make([]int64, 0, len(orders))
 	dramaIDs := make([]int64, 0, len(orders))
 	for _, o := range orders {
-		if o.OrderType == "subscription" && o.PlanID > 0 {
+		if o.OrderType == "subscription" && o.Amount <= 0 && o.PlanID > 0 {
 			planIDs = append(planIDs, o.PlanID)
 		}
 		if o.OrderType == "unlock" && o.DramaID > 0 {
@@ -224,7 +225,6 @@ func (s *miniPaymentService) PaymentRecords(userID int64) (*MiniPaymentRecords, 
 		}
 	}
 
-	const layout = "2006-01-02 15:04:05"
 	result := &MiniPaymentRecords{
 		Subscriptions: make([]MiniSubscriptionRecord, 0),
 		Unlocks:       make([]MiniUnlockRecord, 0),
@@ -232,22 +232,14 @@ func (s *miniPaymentService) PaymentRecords(userID int64) (*MiniPaymentRecords, 
 	for _, o := range orders {
 		paidAt := ""
 		if o.PaidAt != nil {
-			paidAt = o.PaidAt.Format(layout)
+			paidAt = datetime.FormatUTC(*o.PaidAt)
 		}
 		switch o.OrderType {
 		case "subscription":
-			amount := 0.0
-			if p, ok := plans[o.PlanID]; ok {
-				if o.DeviceOS == "Google" {
-					amount = p.GooglePrice
-				} else {
-					amount = p.ApplePrice
-				}
-			}
 			result.Subscriptions = append(result.Subscriptions, MiniSubscriptionRecord{
 				OrderNo:  o.OrderNo,
 				Period:   o.Period,
-				Amount:   amount,
+				Amount:   subscriptionOrderAmount(o, plans),
 				DeviceOS: o.DeviceOS,
 				PaidAt:   paidAt,
 			})
@@ -271,7 +263,7 @@ func (s *miniPaymentService) PaymentRecords(userID int64) (*MiniPaymentRecords, 
 // 便于后台按 status 精确筛选。
 func (s *miniPaymentService) ExpireOverdueSubscriptions() (int64, error) {
 	res := s.db.Model(&model.UserSubscription{}).
-		Where("status = ? AND expire_at <= ?", "active", time.Now()).
+		Where("status = ? AND expire_at <= ?", "active", datetime.NowUTC()).
 		Update("status", "expired")
 	return res.RowsAffected, res.Error
 }

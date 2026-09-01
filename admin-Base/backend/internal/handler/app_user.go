@@ -2,7 +2,6 @@ package handler
 
 import (
 	"strconv"
-	"time"
 
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/service"
@@ -17,30 +16,18 @@ func ListAppUsers(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	appID, _ := strconv.ParseInt(c.Query("appId"), 10, 64)
 
-	var createdAtFrom, createdAtTo *time.Time
-	if from := c.Query("createdAtFrom"); from != "" {
-		if t, err := time.Parse("2006-01-02", from); err == nil {
-			createdAtFrom = &t
-		}
-	}
-	if to := c.Query("createdAtTo"); to != "" {
-		if t, err := time.Parse("2006-01-02", to); err == nil {
-			// 设置为当天结束
-			end := t.Add(24*time.Hour - time.Second)
-			createdAtTo = &end
-		}
-	}
+	createdAtFrom, createdAtTo := ParseChinaDateRange(c, "createdAtFrom", "createdAtTo")
 
 	filter := service.AppUserListFilter{
-		AppID:         appID,
-		UserID:        TrimQuery(c, "userId"),
-		OpenID:        TrimQuery(c, "openId"),
-		UnionID:       TrimQuery(c, "unionId"),
+		AppID:              appID,
+		UserID:             TrimQuery(c, "userId"),
+		OpenID:             TrimQuery(c, "openId"),
+		UnionID:            TrimQuery(c, "unionId"),
 		SubscriptionStatus: TrimQuery(c, "subscriptionStatus"),
-		CreatedAtFrom: createdAtFrom,
-		CreatedAtTo:   createdAtTo,
-		Page:          page,
-		PageSize:      pageSize,
+		CreatedAtFrom:      createdAtFrom,
+		CreatedAtTo:        createdAtTo,
+		Page:               page,
+		PageSize:           pageSize,
 	}
 
 	list, total, err := Svc.AppUser.List(filter)

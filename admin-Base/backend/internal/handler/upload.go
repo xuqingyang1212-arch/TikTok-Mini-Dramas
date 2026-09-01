@@ -8,22 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"scaffold-admin/internal/config"
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"github.com/gin-gonic/gin"
 )
-
-// MediaStorageDir is the external directory for all media files (images, videos, etc.)
-// Keeping media separate from the codebase
-const MediaStorageDir = "/Users/xuqingyang/Documents/cursor文件/媒体文件存储/tiktok mini drama"
-
-func init() {
-	// Ensure upload directory exists
-	if err := os.MkdirAll(MediaStorageDir, 0755); err != nil {
-		panic(fmt.Sprintf("failed to create upload dir: %v", err))
-	}
-}
 
 // UploadImage handles single image file upload
 // Returns the URL path to access the uploaded file
@@ -57,7 +47,7 @@ func UploadImage(c *gin.Context) {
 
 	// Generate unique filename: date + snowflake ID + ext
 	dateDir := time.Now().Format("2006/01/02")
-	fullDir := filepath.Join(MediaStorageDir, "images", dateDir)
+	fullDir := filepath.Join(config.MediaStorageDir(), "images", dateDir)
 	if err := os.MkdirAll(fullDir, 0755); err != nil {
 		response.FailServer(c, "创建目录失败")
 		return
@@ -116,7 +106,7 @@ func UploadVideo(c *gin.Context) {
 
 	// Generate unique filename: date + snowflake ID + ext
 	dateDir := time.Now().Format("2006/01/02")
-	fullDir := filepath.Join(MediaStorageDir, "videos", dateDir)
+	fullDir := filepath.Join(config.MediaStorageDir(), "videos", dateDir)
 	if err := os.MkdirAll(fullDir, 0755); err != nil {
 		response.FailServer(c, "创建目录失败")
 		return

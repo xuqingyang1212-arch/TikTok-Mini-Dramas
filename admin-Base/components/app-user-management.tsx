@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
 import { FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, RightDrawer, type DateRangeValue, FixedHeaderTable, thClass } from "@/components/shared"
-import { appUserApi, appApi } from "@/lib/api"
+import { appUserApi } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { useAppOptions } from "@/hooks/use-app-options"
+import { usePagedQuery } from "@/hooks/use-paged-query"
 
 // ─────────────── Types ───────────────
 interface AppUserItem {
@@ -142,12 +144,32 @@ export default function AppUserManagement() {
   // ─── Filter & Pagination ───
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
+  const { options: rawAppOptions } = useAppOptions(100)
+  const appOptions = rawAppOptions.map((app) => ({ label: app.name, value: String(app.id) }))
 
-  // ─── Data ───
-  const [data, setData] = useState<AppUserItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [appOptions, setAppOptions] = useState<{ label: string; value: string }[]>([])
+  const fetchList = useCallback(({ page, pageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => (
+    appUserApi.list<AppUserItem>({
+      page,
+      pageSize,
+      appId: filters?.appId || undefined,
+      userId: filters?.userId.trim() || undefined,
+      openId: filters?.openId.trim() || undefined,
+      unionId: filters?.unionId.trim() || undefined,
+      subscriptionStatus: filters?.subscriptionStatus || undefined,
+      createdAtFrom: filters?.createdAtRange[0] || undefined,
+      createdAtTo: filters?.createdAtRange[1] || undefined,
+    })
+  ), [])
+  const { data, total, loading, error: listError } = usePagedQuery({
+    page: currentPage,
+    pageSize,
+    filters: activeFilters,
+    fetcher: fetchList,
+  })
+
+  useEffect(() => {
+    if (listError) toast.error(listError)
+  }, [listError])
 
   // ─── Detail modal ───
   const [selectedUser, setSelectedUser] = useState<AppUserItem | null>(null)
@@ -155,45 +177,6 @@ export default function AppUserManagement() {
   function openDetail(row: AppUserItem) {
     setSelectedUser(row)
   }
-
-  // ─── Load app options ───
-  useEffect(() => {
-    appApi.list({ page: 1, pageSize: 100 }).then((res) => {
-      const options = (res.list || []).map((app: any) => ({
-        label: app.name,
-        value: String(app.id),
-      }))
-      setAppOptions(options)
-    }).catch(() => {})
-  }, [])
-
-  // ─── Fetch list ───
-  const fetchList = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await appUserApi.list<AppUserItem>({
-        page: currentPage,
-        pageSize,
-        appId: activeFilters.appId || undefined,
-        userId: activeFilters.userId.trim() || undefined,
-        openId: activeFilters.openId.trim() || undefined,
-        unionId: activeFilters.unionId.trim() || undefined,
-        subscriptionStatus: activeFilters.subscriptionStatus || undefined,
-        createdAtFrom: activeFilters.createdAtRange[0] || undefined,
-        createdAtTo: activeFilters.createdAtRange[1] || undefined,
-      })
-      setData(res.list || [])
-      setTotal(res.total ?? 0)
-    } catch {
-      setData([])
-      setTotal(0)
-      toast.error("加载失败")
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage, pageSize, activeFilters])
-
-  useEffect(() => { void fetchList() }, [fetchList])
 
   // ─── Handlers ───
   function handleQuery() { applyFilters(); resetPage() }
@@ -343,7 +326,7 @@ function UserDetailDrawer({
           mapRow={(s: any) => [
             PERIOD_LABEL[s.period] || s.period,
             s.amount != null ? String(s.amount) : "-",
-            s.paidAt || "-",
+            formatDateTime(s.paidAt),
             s.orderNo,
           ]}
         />
@@ -359,7 +342,7 @@ function UserDetailDrawer({
             UNLOCK_TYPE_LABEL[u.unlockType] || u.unlockType || "-",
             formatEpisodes(u.unlockCount, u.episodes),
             u.unlockType === "beans" ? String(u.beansCost) : "-",
-            u.unlockedAt || "-",
+            formatDateTime(u.unlockedAt),
             u.orderNo || u.adSessionNo || "-",
           ]}
         />
@@ -373,7 +356,7 @@ function UserDetailDrawer({
             w.dramaName || "-",
             `第${w.episodeNo}集`,
             UNLOCK_TYPE_LABEL[w.unlockType] || w.unlockType || "-",
-            w.watchedAt || "-",
+            formatDateTime(w.watchedAt),
           ]}
         />
       )}

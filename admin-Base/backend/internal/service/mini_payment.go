@@ -71,7 +71,7 @@ type MiniSubscriptionRecord struct {
 	Period   string  `json:"period"` // weekly/monthly/quarterly/yearly
 	Amount   float64 `json:"amount"` // 实际支付金额（按设备系统取 Apple/Google 价）
 	DeviceOS string  `json:"deviceOs"`
-	PaidAt   string  `json:"paidAt"` // 支付时间 2006-01-02 15:04:05
+	PaidAt   string  `json:"paidAt"` // YYYY-MM-DDTHH:mm:ss.SSSZ
 }
 
 // MiniUnlockRecord 用户一条 Beans 解锁支付成功记录
@@ -82,7 +82,7 @@ type MiniUnlockRecord struct {
 	UnlockCount int    `json:"unlockCount"` // 本单解锁的集数
 	Episodes    []int  `json:"episodes"`    // 本单解锁的具体集数
 	BeansCost   int    `json:"beansCost"`   // 支付的 Beans
-	PaidAt      string `json:"paidAt"`      // 支付时间 2006-01-02 15:04:05
+	PaidAt      string `json:"paidAt"`      // YYYY-MM-DDTHH:mm:ss.SSSZ
 }
 
 // MiniPaymentRecords 用户支付成功记录（订阅 + Beans 解锁）

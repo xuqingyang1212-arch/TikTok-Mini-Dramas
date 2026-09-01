@@ -47,7 +47,7 @@ storage:
     # 上传文件存储目录（相对于后端工作目录）
     upload_dir: "./uploads"
     # 访问 URL 前缀
-    base_url: "http://127.0.0.1:8080/static"
+    base_url: "http://127.0.0.1:8080/media"
   # 以下为正式环境配置（演示模式不使用）
   oss:
     endpoint: ""

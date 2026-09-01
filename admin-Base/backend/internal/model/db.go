@@ -2,6 +2,7 @@ package model
 
 import (
 	"log"
+	"time"
 
 	"scaffold-admin/internal/config"
 
@@ -25,6 +26,7 @@ func InitDB() {
 	DB, err = gorm.Open(mysql.Open(cfg.DSN()), &gorm.Config{
 		Logger:                                   logger.Default.LogMode(logLevel),
 		DisableForeignKeyConstraintWhenMigrating: true,
+		NowFunc:                                  func() time.Time { return time.Now().UTC() },
 	})
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
@@ -40,6 +42,18 @@ func InitDB() {
 }
 
 func AutoMigrate() {
+	// 旧数据可能没有 tier_id。必须在创建唯一索引前补齐，否则同一应用的
+	// 多条空 tier 会使 AutoMigrate 创建索引失败并阻止服务启动。
+	if DB.Migrator().HasTable(&SubscriptionPlan{}) && DB.Migrator().HasColumn(&SubscriptionPlan{}, "tier_id") {
+		if err := DB.Exec(`
+			UPDATE subscription_plans
+			SET tier_id = CONCAT('__legacy_tier_', id)
+			WHERE tier_id IS NULL OR TRIM(tier_id) = ''
+		`).Error; err != nil {
+			log.Fatalf("failed to backfill legacy subscription tier IDs: %v", err)
+		}
+	}
+
 	// 演示项目统一由 GORM 在启动时维护表结构，不再同时维护版本化 DDL。
 	// migrations/ 仅保留初始化账号等种子数据。
 	err := DB.AutoMigrate(
@@ -61,6 +75,9 @@ func AutoMigrate() {
 	)
 	if err != nil {
 		log.Fatalf("failed to auto-migrate: %v", err)
+	}
+	if err := migrateLegacyTimesToUTC(); err != nil {
+		log.Fatalf("failed to migrate legacy timestamps to UTC: %v", err)
 	}
 
 	// 迁移收尾：删除历史遗留的 open_id 单列唯一索引。

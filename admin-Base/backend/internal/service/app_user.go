@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
@@ -29,16 +30,16 @@ type AppUserListFilter struct {
 }
 
 type AppUserListItem struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"userId"`
-	AppID     int64     `json:"appId"`
-	AppName   string    `json:"appName"`
-	OpenID    string    `json:"openId"`
-	UnionID   string    `json:"unionId"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID        string        `json:"id"`
+	UserID    string        `json:"userId"`
+	AppID     int64         `json:"appId"`
+	AppName   string        `json:"appName"`
+	OpenID    string        `json:"openId"`
+	UnionID   string        `json:"unionId"`
+	CreatedAt datetime.Time `json:"createdAt"`
 	// 当前订阅状态："active"（生效中）/"expired"（已过期）/""（未订阅）
-	SubscriptionStatus   string     `json:"subscriptionStatus"`
-	SubscriptionExpireAt *time.Time `json:"subscriptionExpireAt"`
+	SubscriptionStatus   string         `json:"subscriptionStatus"`
+	SubscriptionExpireAt *datetime.Time `json:"subscriptionExpireAt"`
 }
 
 // ─── User Detail (用户详情弹窗) ─────────────────────────────────────────────
@@ -79,9 +80,9 @@ type AppUserDetail struct {
 	AppName              string                      `json:"appName"`
 	OpenID               string                      `json:"openId"`
 	UnionID              string                      `json:"unionId"`
-	CreatedAt            time.Time                   `json:"createdAt"`
+	CreatedAt            datetime.Time               `json:"createdAt"`
 	SubscriptionStatus   string                      `json:"subscriptionStatus"`
-	SubscriptionExpireAt *time.Time                  `json:"subscriptionExpireAt"`
+	SubscriptionExpireAt *datetime.Time              `json:"subscriptionExpireAt"`
 	Subscriptions        []AppUserSubscriptionRecord `json:"subscriptions"`
 	Unlocks              []AppUserUnlockRecord       `json:"unlocks"`
 	WatchLogs            []AppUserWatchRecord        `json:"watchLogs"`
@@ -136,12 +137,12 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 		db = db.Where("app_users.created_at >= ?", f.CreatedAtFrom)
 	}
 	if f.CreatedAtTo != nil {
-		db = db.Where("app_users.created_at <= ?", f.CreatedAtTo)
+		db = db.Where("app_users.created_at < ?", f.CreatedAtTo)
 	}
 
 	// 订阅状态筛选（基于 user_subscriptions 子查询）
 	if f.SubscriptionStatus != "" {
-		now := time.Now()
+		now := datetime.NowUTC()
 		switch f.SubscriptionStatus {
 		case "active":
 			db = db.Where("app_users.id IN (?)",
@@ -199,7 +200,7 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 			AppName:   r.AppName,
 			OpenID:    r.OpenID,
 			UnionID:   r.UnionID,
-			CreatedAt: r.CreatedAt,
+			CreatedAt: datetime.From(r.CreatedAt),
 		}
 	}
 
@@ -208,11 +209,14 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 	for i, r := range results {
 		userIDs[i] = r.ID
 	}
-	statusMap := s.subscriptionStatusMap(userIDs)
+	statusMap, err := s.subscriptionStatusMap(userIDs)
+	if err != nil {
+		return nil, 0, err
+	}
 	for i := range items {
 		if st, ok := statusMap[results[i].ID]; ok {
 			items[i].SubscriptionStatus = st.status
-			items[i].SubscriptionExpireAt = st.expireAt
+			items[i].SubscriptionExpireAt = datetime.FromPtr(st.expireAt)
 		}
 	}
 	return items, total, nil
@@ -228,16 +232,18 @@ type subUserStatus struct {
 // 判定规则：存在 status=active 且 expire_at>now 的订阅记为 active，
 // 取其中到期最晚的一条作为到期时间；否则若历史上存在过订阅则记为 expired，
 // 并保留历史订阅中最晚的到期时间。
-func (s *appUserService) subscriptionStatusMap(userIDs []int64) map[int64]subUserStatus {
+func (s *appUserService) subscriptionStatusMap(userIDs []int64) (map[int64]subUserStatus, error) {
 	result := make(map[int64]subUserStatus)
 	if len(userIDs) == 0 {
-		return result
+		return result, nil
 	}
 	var subs []model.UserSubscription
-	s.db.Where("user_id IN ?", userIDs).
-		Order("expire_at DESC").Find(&subs)
+	if err := s.db.Where("user_id IN ?", userIDs).
+		Order("expire_at DESC").Find(&subs).Error; err != nil {
+		return nil, err
+	}
 
-	now := time.Now()
+	now := datetime.NowUTC()
 	for i := range subs {
 		sub := subs[i]
 		cur := result[sub.UserID]
@@ -253,7 +259,7 @@ func (s *appUserService) subscriptionStatusMap(userIDs []int64) map[int64]subUse
 			result[sub.UserID] = subUserStatus{status: "expired", expireAt: &expire}
 		}
 	}
-	return result
+	return result, nil
 }
 
 func (s *appUserService) GetByID(id int64) (*model.AppUser, error) {
@@ -277,7 +283,6 @@ func (s *appUserService) Detail(id int64) (*AppUserDetail, error) {
 		return nil, err
 	}
 
-	const layout = "2006-01-02 15:04:05"
 	appName := ""
 	if user.App != nil {
 		appName = user.App.Name
@@ -290,16 +295,20 @@ func (s *appUserService) Detail(id int64) (*AppUserDetail, error) {
 		AppName:       appName,
 		OpenID:        user.OpenID,
 		UnionID:       user.UnionID,
-		CreatedAt:     user.CreatedAt,
+		CreatedAt:     datetime.From(user.CreatedAt),
 		Subscriptions: make([]AppUserSubscriptionRecord, 0),
 		Unlocks:       make([]AppUserUnlockRecord, 0),
 		WatchLogs:     make([]AppUserWatchRecord, 0),
 	}
 
 	// 当前订阅状态与到期时间
-	if st, ok := s.subscriptionStatusMap([]int64{user.ID})[user.ID]; ok {
+	statusMap, err := s.subscriptionStatusMap([]int64{user.ID})
+	if err != nil {
+		return nil, err
+	}
+	if st, ok := statusMap[user.ID]; ok {
 		detail.SubscriptionStatus = st.status
-		detail.SubscriptionExpireAt = st.expireAt
+		detail.SubscriptionExpireAt = datetime.FromPtr(st.expireAt)
 	}
 
 	// ── 成功订阅记录 ──
@@ -317,105 +326,13 @@ func (s *appUserService) Detail(id int64) (*AppUserDetail, error) {
 	detail.Unlocks = unlockRecords
 
 	// ── 阅读记录 ──
-	var logs []model.WatchLog
-	if err := s.db.Where("user_id = ?", id).
-		Order("watched_at DESC").Find(&logs).Error; err != nil {
+	watchRecords, _, err := s.queryWatchRecords(id, 0, 0)
+	if err != nil {
 		return nil, err
 	}
-	logDramaIDs := make([]int64, 0, len(logs))
-	for _, l := range logs {
-		logDramaIDs = append(logDramaIDs, l.DramaID)
-	}
-	dramaNames := map[int64]string{}
-	if len(logDramaIDs) > 0 {
-		var ds []model.Drama
-		if err := s.db.Where("id IN ?", logDramaIDs).Find(&ds).Error; err != nil {
-			return nil, err
-		}
-		for _, d := range ds {
-			dramaNames[d.ID] = d.Name
-		}
-	}
-	for _, l := range logs {
-		detail.WatchLogs = append(detail.WatchLogs, AppUserWatchRecord{
-			DramaName:  dramaNames[l.DramaID],
-			EpisodeNo:  l.EpisodeNo,
-			UnlockType: l.UnlockType,
-			WatchedAt:  l.WatchedAt.Format(layout),
-		})
-	}
+	detail.WatchLogs = watchRecords
 
 	return detail, nil
-}
-
-// subscriptionAmount 按设备系统取订阅档位的实付金额
-func subscriptionAmount(plans map[int64]model.SubscriptionPlan, planID int64, deviceOS string) float64 {
-	p, ok := plans[planID]
-	if !ok {
-		return 0
-	}
-	if deviceOS == "Google" {
-		return p.GooglePrice
-	}
-	return p.ApplePrice
-}
-
-// Subscriptions 分页返回用户会员订阅记录（仅成功订单）
-func (s *appUserService) Subscriptions(id int64, page, pageSize int) ([]AppUserSubscriptionRecord, int64, error) {
-	pg, size := normalizePage(page, pageSize)
-	return s.querySubscriptionRecords(id, size, (pg-1)*size)
-}
-
-func (s *appUserService) querySubscriptionRecords(id int64, limit, offset int) ([]AppUserSubscriptionRecord, int64, error) {
-	base := s.db.Model(&model.PaymentOrder{}).
-		Where("user_id = ? AND pay_status = ? AND order_type = ?", id, "paid", "subscription")
-
-	var total int64
-	if err := base.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	var orders []model.PaymentOrder
-	query := base.Order("paid_at DESC")
-	if limit > 0 {
-		query = query.Offset(offset).Limit(limit)
-	}
-	if err := query.Find(&orders).Error; err != nil {
-		return nil, 0, err
-	}
-
-	planIDs := make([]int64, 0, len(orders))
-	for _, o := range orders {
-		if o.PlanID > 0 {
-			planIDs = append(planIDs, o.PlanID)
-		}
-	}
-	plans := map[int64]model.SubscriptionPlan{}
-	if len(planIDs) > 0 {
-		var ps []model.SubscriptionPlan
-		if err := s.db.Where("id IN ?", planIDs).Find(&ps).Error; err != nil {
-			return nil, 0, err
-		}
-		for _, p := range ps {
-			plans[p.ID] = p
-		}
-	}
-
-	const layout = "2006-01-02 15:04:05"
-	items := make([]AppUserSubscriptionRecord, 0, len(orders))
-	for _, o := range orders {
-		paidAt := ""
-		if o.PaidAt != nil {
-			paidAt = o.PaidAt.Format(layout)
-		}
-		items = append(items, AppUserSubscriptionRecord{
-			Period:  o.Period,
-			Amount:  subscriptionAmount(plans, o.PlanID, o.DeviceOS),
-			PaidAt:  paidAt,
-			OrderNo: o.OrderNo,
-		})
-	}
-	return items, total, nil
 }
 
 // Unlocks 分页返回用户的 Beans 与广告永久解锁记录。
@@ -427,50 +344,6 @@ func (s *appUserService) Unlocks(id int64, page, pageSize int) ([]AppUserUnlockR
 		return nil, 0, err
 	}
 	return s.queryUnlockRecords(user.AppID, id, size, (pg-1)*size)
-}
-
-// WatchLogs 分页返回用户阅读记录
-func (s *appUserService) WatchLogs(id int64, page, pageSize int) ([]AppUserWatchRecord, int64, error) {
-	pg, size := normalizePage(page, pageSize)
-	base := s.db.Model(&model.WatchLog{}).Where("user_id = ?", id)
-
-	var total int64
-	if err := base.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	var logs []model.WatchLog
-	if err := base.Order("watched_at DESC").
-		Offset((pg - 1) * size).Limit(size).Find(&logs).Error; err != nil {
-		return nil, 0, err
-	}
-
-	dramaIDs := make([]int64, 0, len(logs))
-	for _, l := range logs {
-		dramaIDs = append(dramaIDs, l.DramaID)
-	}
-	dramaNames := map[int64]string{}
-	if len(dramaIDs) > 0 {
-		var ds []model.Drama
-		if err := s.db.Where("id IN ?", dramaIDs).Find(&ds).Error; err != nil {
-			return nil, 0, err
-		}
-		for _, d := range ds {
-			dramaNames[d.ID] = d.Name
-		}
-	}
-
-	const layout = "2006-01-02 15:04:05"
-	items := make([]AppUserWatchRecord, 0, len(logs))
-	for _, l := range logs {
-		items = append(items, AppUserWatchRecord{
-			DramaName:  dramaNames[l.DramaID],
-			EpisodeNo:  l.EpisodeNo,
-			UnlockType: l.UnlockType,
-			WatchedAt:  l.WatchedAt.Format(layout),
-		})
-	}
-	return items, total, nil
 }
 
 func (s *appUserService) Create(in CreateAppUserInput) (*model.AppUser, error) {

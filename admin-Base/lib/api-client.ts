@@ -2,16 +2,60 @@
 // 各业务 endpoint 仅从这里 import，不直接 fetch。
 
 export function getApiBase() {
+  const envBase = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "")
+  if (envBase) return envBase
+
   if (typeof window !== "undefined") {
-    return `http://${window.location.hostname}:8080/api/v1`
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:8080/api/v1`
   }
-  return process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080/api/v1"
+
+  return "http://localhost:8080/api/v1"
+}
+
+export function getMediaBase() {
+  const envBase = process.env.NEXT_PUBLIC_MEDIA_BASE || process.env.NEXT_PUBLIC_API_BASE
+  if (envBase) return envBase.replace(/\/$/, "")
+
+  if (typeof window !== "undefined") {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:8080`
+  }
+
+  return "http://localhost:8080"
+}
+
+export function resolveMediaUrl(url: string): string {
+  if (!url) return ""
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) return url
+  if (url.startsWith("/")) return `${getMediaBase()}${url}`
+  return `${getMediaBase()}/${url}`
 }
 
 interface ApiResponse<T = unknown> {
   code: number
   message: string
   data: T
+  error?: string
+}
+
+function getAuthHeader(): string | undefined {
+  const t = getToken()
+  if (!t) return undefined
+  return t.startsWith("Bearer ") ? t : `Bearer ${t}`
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const text = await res.text()
+    if (!text) return `服务器错误 (${res.status})`
+    const json = JSON.parse(text) as Partial<ApiResponse>
+    if (typeof json.message === "string" && json.message.trim()) return json.message
+    if (typeof json.error === "string" && json.error.trim()) return json.error
+    return `请求失败 (${res.status})`
+  } catch {
+    return `请求失败 (${res.status})`
+  }
 }
 
 let token = ""
@@ -47,12 +91,12 @@ async function request<T = unknown>(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
+    ...(options.headers as Record<string, string> | undefined),
   }
 
-  const t = getToken()
-  if (t) {
-    headers["Authorization"] = `Bearer ${t}`
+  const authHeader = getAuthHeader()
+  if (authHeader) {
+    headers["Authorization"] = authHeader
   }
 
   const controller = new AbortController()
@@ -89,7 +133,7 @@ async function request<T = unknown>(
     const body = await res.text()
     let msg = "您的账号已在其他设备登录，当前会话已失效"
     try {
-      const j = JSON.parse(body)
+      const j = JSON.parse(body) as { message?: string }
       if (j.message) msg = j.message
     } catch {}
     clearToken()
@@ -100,13 +144,19 @@ async function request<T = unknown>(
     throw new Error(msg)
   }
 
+  if (!res.ok) {
+    const msg = await readErrorMessage(res)
+    throw new Error(msg)
+  }
+
   const text = await res.text()
   if (!text) {
-    throw new Error(`服务器错误 (${res.status})`)
+    return undefined as T
   }
+
   let json: ApiResponse<T>
   try {
-    json = JSON.parse(text)
+    json = JSON.parse(text) as ApiResponse<T>
   } catch {
     throw new Error(`服务器返回异常 (${res.status})`)
   }
@@ -150,9 +200,9 @@ export async function uploadFile<T = unknown>(
   const form = new FormData()
   form.append(fieldName, file)
 
-  const t = getToken()
   const headers: Record<string, string> = {}
-  if (t) headers["Authorization"] = `Bearer ${t}`
+  const authHeader = getAuthHeader()
+  if (authHeader) headers["Authorization"] = authHeader
 
   const res = await fetch(`${getApiBase()}${path}`, {
     method: "POST",
@@ -166,7 +216,12 @@ export async function uploadFile<T = unknown>(
     throw new Error("未登录或登录已过期")
   }
 
-  const json = await res.json()
+  if (!res.ok) {
+    const msg = await readErrorMessage(res)
+    throw new Error(msg)
+  }
+
+  const json = (await res.json()) as ApiResponse<T>
   if (json.code !== 0) throw new Error(json.message || "上传失败")
   return json.data as T
 }
@@ -189,8 +244,8 @@ export function uploadFileWithProgress<T = unknown>(
     const xhr = new XMLHttpRequest()
     xhr.open("POST", `${getApiBase()}${path}`)
 
-    const t = getToken()
-    if (t) xhr.setRequestHeader("Authorization", `Bearer ${t}`)
+    const authHeader = getAuthHeader()
+    if (authHeader) xhr.setRequestHeader("Authorization", authHeader)
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -199,7 +254,7 @@ export function uploadFileWithProgress<T = unknown>(
     }
     xhr.onload = () => {
       try {
-        const json = JSON.parse(xhr.responseText)
+        const json = JSON.parse(xhr.responseText) as ApiResponse<T>
         if (json.code !== 0) return reject(new Error(json.message || "上传失败"))
         resolve(json.data as T)
       } catch { reject(new Error("上传失败")) }

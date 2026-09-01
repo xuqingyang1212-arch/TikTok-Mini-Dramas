@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"fmt"
+	"os"
 	"time"
 
+	"scaffold-admin/internal/config"
 	"scaffold-admin/internal/consts"
 	"scaffold-admin/internal/middleware"
 	"scaffold-admin/internal/model"
@@ -26,7 +29,11 @@ func SetupRouter(mode string) *gin.Engine {
 	}))
 
 	// Serve uploaded files
-	r.Static("/media", MediaStorageDir)
+	mediaDir := config.MediaStorageDir()
+	if err := os.MkdirAll(mediaDir, 0755); err != nil {
+		panic(fmt.Sprintf("failed to create media storage directory %q: %v", mediaDir, err))
+	}
+	r.Static("/media", mediaDir)
 
 	api := r.Group("/api/v1")
 

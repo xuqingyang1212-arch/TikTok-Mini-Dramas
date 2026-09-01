@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/service"
 
@@ -58,7 +60,7 @@ type createSubscriptionPlanReq struct {
 	ApplePrice  float64 `json:"applePrice" binding:"min=0"`
 	GooglePrice float64 `json:"googlePrice" binding:"min=0"`
 	WebDiscount int     `json:"webDiscount" binding:"min=0,max=100"`
-	TierID      string  `json:"tierId"`
+	TierID      string  `json:"tierId" binding:"required"`
 }
 
 func CreateSubscriptionPlan(c *gin.Context) {
@@ -76,6 +78,10 @@ func CreateSubscriptionPlan(c *gin.Context) {
 		WebDiscount: req.WebDiscount,
 		TierID:      req.TierID,
 	})
+	if err == service.ErrSubscriptionTierRequired {
+		response.FailBadRequest(c, err.Error())
+		return
+	}
 	if err == service.ErrDuplicatePeriod {
 		response.FailBadRequest(c, err.Error())
 		return
@@ -128,6 +134,11 @@ func UpdateSubscriptionPlan(c *gin.Context) {
 		return
 	}
 
+	if req.TierID != nil && strings.TrimSpace(*req.TierID) == "" {
+		response.FailBadRequest(c, "tier_id不能为空")
+		return
+	}
+
 	err := Svc.Subscription.Update(id, service.UpdateSubscriptionPlanInput{
 		Period:      req.Period,
 		ApplePrice:  req.ApplePrice,
@@ -137,6 +148,10 @@ func UpdateSubscriptionPlan(c *gin.Context) {
 	})
 	if err == service.ErrSubscriptionPlanNotFound {
 		response.FailNotFound(c, "订阅档位不存在")
+		return
+	}
+	if err == service.ErrSubscriptionTierRequired {
+		response.FailBadRequest(c, err.Error())
 		return
 	}
 	if err == service.ErrDuplicatePeriod {

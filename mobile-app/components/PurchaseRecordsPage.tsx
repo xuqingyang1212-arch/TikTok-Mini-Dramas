@@ -35,7 +35,25 @@ const periodLabelKeys: Record<SubscriptionPaymentRecord["period"], TranslationKe
   yearly: "purchase.yearlyMember",
 }
 
+function getBrowserTimeZone() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return timeZone || undefined
+}
+
 function formatPaidAt(paidAt: string, locale: Locale) {
+  const date = new Date(paidAt)
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+      timeZone: getBrowserTimeZone(),
+      year: "numeric",
+      month: locale === "zh" ? "numeric" : "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date)
+  }
+
+  // Keep compatibility with older API values that did not include a timezone.
   const matched = paidAt.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/)
   if (!matched) return paidAt
 
@@ -44,14 +62,14 @@ function formatPaidAt(paidAt: string, locale: Locale) {
     return `${year}年${Number(month)}月${Number(day)}日 ${hour}:${minute}`
   }
 
-  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute))
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: getBrowserTimeZone(),
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date)
+  }).format(new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)))
 }
 
 function formatEpisodes(episodes: number[], locale: Locale) {

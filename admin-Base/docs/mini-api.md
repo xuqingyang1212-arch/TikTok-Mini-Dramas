@@ -7,7 +7,7 @@
 - Base URL：`http://localhost:8080`，局域网 `http://10.235.120.10:8080`
 - 所有接口无需后台登录鉴权。
 - 统一响应结构：`{ "code": 0, "message": "success", "data": {...} }`，`code != 0` 为失败，`message` 为原因。
-- 时间字段为 RFC3339 字符串（如 `2026-08-11T11:07:10+08:00`）。
+- 所有时间字段均为 UTC，固定使用带三位毫秒的 RFC3339 格式（如 `2026-08-11T03:07:10.000Z`）。客户端应按用户设备时区转换后展示。
 - `userId` 为登录接口返回的雪花字符串，凡涉及“当前用户解锁状态”的接口都应带上，未带则按未登录（仅免费集）处理。
 
 ### 请求语言
@@ -113,7 +113,7 @@ curl -H 'Accept-Language: en-US' 'http://localhost:8080/api/mini/dramas?page=1&p
     "subscription": {
       "active": true,
       "period": "weekly",
-      "expireAt": "2026-08-11T11:07:10+08:00"
+      "expireAt": "2026-08-11T03:07:10.000Z"
     }
   }
 }
@@ -142,11 +142,11 @@ curl -H 'Accept-Language: en-US' 'http://localhost:8080/api/mini/dramas?page=1&p
     "openId": "user_openid_xxx",
     "appName": "BFDrama",
     "clientKey": "aw7x9k2m4p6q8r1t3v5y",
-    "createdAt": "2026-08-04T11:21:59+08:00",
+    "createdAt": "2026-08-04T03:21:59.000Z",
     "subscription": {
       "active": true,
       "period": "weekly",
-      "expireAt": "2026-08-11T11:22:09+08:00"
+      "expireAt": "2026-08-11T03:22:09.000Z"
     }
   }
 }
@@ -302,7 +302,7 @@ IAA 应用每完整观看一次广告永久解锁一集。广告会话有效期�
     "dramaId": "358554131406786560",
     "episodeNo": 3,
     "adPlacementId": "rewarded_video_xxx",
-    "expireAt": "2026-08-27T15:30:00+08:00",
+    "expireAt": "2026-08-27T07:30:00.000Z",
     "unlockType": "locked",
     "isUnlocked": false
   }
@@ -323,7 +323,7 @@ IAA 应用每完整观看一次广告永久解锁一集。广告会话有效期�
 { "userId": "359916..." }
 ```
 
-只有 TikTok 前端 `onClose({ isEnded })` 中 `isEnded === true` 时才调用。服务端校验会话归属后，以事务完成会话并写入永久权益。成功响应中的 `status` 为 `completed`、`unlockType` 为最终真实权益来源、`isUnlocked=true`。重复完成会幂等返回当前结果。
+只有真实 TikTok 前端广告 SDK 的 `onClose({ isEnded })` 中 `isEnded === true` 时才能调用。当前演示小程序使用 3–15 秒随机倒计时模拟完整观看，倒计时完成并由用户关闭广告后调用。服务端校验会话归属后，以事务完成会话并写入永久权益。成功响应中的 `status` 为 `completed`、`unlockType` 为最终真实权益来源、`isUnlocked=true`。重复完成会幂等返回当前结果。
 
 ### 8.3 取消广告会话
 
@@ -480,7 +480,7 @@ IAA 应用每完整观看一次广告永久解锁一集。广告会话有效期�
         "period": "weekly",
         "amount": 6.99,
         "deviceOs": "Google",
-        "paidAt": "2026-08-05 11:21:20"
+        "paidAt": "2026-08-05T03:21:20.000Z"
       }
     ],
     "unlocks": [
@@ -491,7 +491,7 @@ IAA 应用每完整观看一次广告永久解锁一集。广告会话有效期�
         "unlockCount": 5,
         "episodes": [2, 3, 4, 5, 6],
         "beansCost": 500,
-        "paidAt": "2026-08-05 11:21:04"
+        "paidAt": "2026-08-05T03:21:04.000Z"
       }
     ]
   }
@@ -502,7 +502,7 @@ IAA 应用每完整观看一次广告永久解锁一集。广告会话有效期�
 - `period`：订阅周期，枚举 `weekly` / `monthly` / `quarterly` / `half_yearly` / `yearly`。
 - `amount`：实际支付金额，按下单时的设备系统取对应价格（`deviceOs=Google` 取 Google 价，否则取 Apple 价）。
 - `deviceOs`：下单设备系统，`Apple` / `Google`。
-- `paidAt`：支付时间，格式 `2006-01-02 15:04:05`。
+- `paidAt`：支付时间，格式 `YYYY-MM-DDTHH:mm:ss.SSSZ`。
 
 Beans 解锁记录 `unlocks[]`：
 - `dramaId` / `dramaName`：解锁的剧集 ID 与名称。
@@ -540,7 +540,7 @@ Beans 解锁记录 `unlocks[]`：
     "dramaId": "358554131406786560",
     "episodeNo": 3,
     "unlockType": "beans",
-    "watchedAt": "2026-08-05 12:01:51"
+    "watchedAt": "2026-08-05T04:01:51.000Z"
   }
 }
 ```
@@ -550,7 +550,7 @@ Beans 解锁记录 `unlocks[]`：
   - `beans`：该集已用 Beans 购买解锁。
   - `ad`：该集已通过完整观看激励广告永久解锁。
   - `subscription`：会员有效期内解锁（且该集没有永久权益）。
-- `watchedAt`：**服务端收到本次上报请求时的时间**（即“开始播放”时刻的近似值，取自服务端 `time.Now()`），格式 `2006-01-02 15:04:05`。与前端真实点击播放时刻之间存在网络延迟；如需以前端时刻为准，可另行约定由前端传入时间戳。
+- `watchedAt`：**服务端收到本次上报请求时的时间**（即“开始播放”时刻的近似值），格式 `YYYY-MM-DDTHH:mm:ss.SSSZ`。与前端真实点击播放时刻之间存在网络延迟；如需以前端时刻为准，可另行约定由前端传入时间戳。
 - 只上报**已解锁**的集（`free` / `beans` / `ad` / `subscription`）。未解锁的集调用本接口会返回 `code=400`，`message="该集尚未解锁，不上报"`，且不落库。
 - 同一集每次开播都会各记一条（不去重），前端无需去重。
 - 错误：该集未解锁 `code=400`；用户不存在 `code=400`；剧集不存在或已下架 `code=404`；集数越界/不存在 `code=404`。
@@ -584,7 +584,7 @@ Beans 解锁记录 `unlocks[]`：
 1. 拉取小程序列表（接口 1），读取 `monetizationType` 后登录（接口 2），取得 `userId`。
 2. 获取剧集列表，并用逐集解锁详情（接口 7）渲染当前状态。
 3. 用户点击 `locked` 集时按变现类型分流：
-   - `IAA`：创建广告会话（接口 8.1）并使用响应中的 `adPlacementId` 展示激励广告。只有 `onClose({ isEnded })` 的 `isEnded === true` 才调用完成接口（接口 8.2）；否则可调用取消接口（接口 8.3）。完成后刷新接口 7，再请求单集播放信息。
+   - `IAA`：创建广告会话（接口 8.1）并使用响应中的 `adPlacementId` 展示激励广告。当前演示小程序以 3–15 秒随机倒计时模拟完整观看；倒计时完成且用户关闭广告时调用完成接口（接口 8.2），中途退出则调用取消接口（接口 8.3）。接入真实 TikTok 广告 SDK 后，只有 `onClose({ isEnded })` 的 `isEnded === true` 才调用完成接口。完成后刷新接口 7，再请求单集播放信息。
    - `IAP`：调用付费面板（接口 9），选择 Beans 档位创建订单（接口 10）或选择订阅方案创建订单（接口 11），随后上报支付结果（接口 12）。成功后刷新接口 7 / 9。
 4. 开始播放时调用观看上报（接口 14）；解锁来源由服务端判定。
 5. 订阅成功后，个人中心调用 `GET /api/mini/users/:userId` 刷新会员状态，不要重复登录。
