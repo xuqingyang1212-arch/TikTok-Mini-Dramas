@@ -102,7 +102,12 @@ func GetAppUserUnlocks(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	list, total, err := Svc.AppUser.Unlocks(id, page, pageSize)
+	unlockType := TrimQuery(c, "unlockType")
+	if unlockType != "" && unlockType != "beans" && unlockType != "ad" {
+		response.FailBadRequest(c, "解锁类型无效")
+		return
+	}
+	list, total, err := Svc.AppUser.Unlocks(id, unlockType, page, pageSize)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return

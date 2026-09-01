@@ -1,11 +1,13 @@
 "use client"
 
-import { CheckCircle2, Loader2, PlaySquare, X } from "lucide-react"
+import { useRef } from "react"
+import { Loader2, X } from "lucide-react"
 import { useI18n } from "@/lib/i18n/I18nProvider"
-import type { AdUnlockSession } from "@/lib/api"
+import { getMediaUrl } from "@/lib/api"
+
+const DEMO_AD_VIDEO_PATH = "/media/videos/20260827-番茄-fjr-fjr-婚礼上的规矩-漫剧-原片-横-3.mp4"
 
 interface RewardedAdOverlayProps {
-  session: AdUnlockSession
   remainingSeconds: number | null
   isRewarded: boolean
   isSubmitting: boolean
@@ -13,10 +15,12 @@ interface RewardedAdOverlayProps {
   onClose: () => void
   onCancel: () => void
   onContinue: () => void
+  onPlaybackStart: () => void
+  onPlaybackPause: () => void
+  onPlaybackError: () => void
 }
 
 export function RewardedAdOverlay({
-  session,
   remainingSeconds,
   isRewarded,
   isSubmitting,
@@ -24,34 +28,42 @@ export function RewardedAdOverlay({
   onClose,
   onCancel,
   onContinue,
+  onPlaybackStart,
+  onPlaybackPause,
+  onPlaybackError,
 }: RewardedAdOverlayProps) {
   const { t } = useI18n()
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  const requestClose = () => {
+    videoRef.current?.pause()
+    onClose()
+  }
+
+  const continueWatching = () => {
+    onContinue()
+    void videoRef.current?.play().catch(onPlaybackError)
+  }
 
   return (
-    <div className="absolute inset-0 z-[60] overflow-hidden bg-[#080808]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(255,138,52,0.24),transparent_38%),linear-gradient(180deg,#1a1511_0%,#080808_62%)]" />
-      <div className="absolute inset-0 opacity-25 [background-image:radial-gradient(rgba(255,255,255,0.18)_1px,transparent_1px)] [background-size:18px_18px]" />
-
-      <div className="relative flex h-full flex-col items-center justify-center px-8 text-center">
-        <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-[#ffad62]/30 bg-[#ff8a34]/15 shadow-[0_0_50px_rgba(255,138,52,0.2)]">
-          {isRewarded ? (
-            <CheckCircle2 size={50} className="text-[#ffad62]" />
-          ) : (
-            <PlaySquare size={50} className="text-[#ffad62]" />
-          )}
-        </div>
-        <h2 className="mt-6 text-[24px] font-bold text-white">
-          {isRewarded ? t("player.adRewardEarned") : t("player.adPlaying")}
-        </h2>
-        <p className="mt-2 max-w-sm text-[15px] leading-6 text-white/58">
-          {isRewarded
-            ? t("player.adCloseToUnlock")
-            : t("player.adRemaining", { seconds: remainingSeconds ?? "--" })}
-        </p>
-        <p className="mt-4 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] text-white/38">
-          {t("player.adDemoPlacement", { placement: session.adPlacementId })}
-        </p>
-      </div>
+    <div className="absolute inset-0 z-[60] overflow-hidden bg-black">
+      <video
+        ref={videoRef}
+        className="h-full w-full object-cover"
+        data-ad-video="true"
+        src={getMediaUrl(DEMO_AD_VIDEO_PATH)}
+        autoPlay
+        loop
+        muted
+        playsInline
+        controls={false}
+        onPlaying={onPlaybackStart}
+        onPause={onPlaybackPause}
+        onWaiting={onPlaybackPause}
+        onError={onPlaybackError}
+        onContextMenu={(event) => event.preventDefault()}
+        style={{ pointerEvents: "none" }}
+      />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+16px)]">
         <div className="rounded-full bg-black/55 px-3.5 py-2 text-[15px] font-semibold text-white backdrop-blur-sm">
@@ -59,7 +71,7 @@ export function RewardedAdOverlay({
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={requestClose}
           disabled={isSubmitting}
           className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm disabled:opacity-50"
           aria-label={t("common.close")}
@@ -76,7 +88,7 @@ export function RewardedAdOverlay({
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
-                onClick={onContinue}
+                onClick={continueWatching}
                 disabled={isSubmitting}
                 className="flex-1 rounded-xl border border-white/10 py-3 text-[15px] text-white/75 disabled:opacity-50"
               >

@@ -139,6 +139,16 @@ export function useRewardedAdUnlock({
     }
   }, [clearRequestController, dramaId, enabled, episodeNo, onUnlocked, session, userId])
 
+  const startPlayback = useCallback(() => {
+    if (!session || isRewarded || showCloseConfirm || isSubmitting) return
+    startCountdown()
+  }, [isRewarded, isSubmitting, session, showCloseConfirm, startCountdown])
+
+  const pausePlayback = useCallback(() => {
+    if (!session || isRewarded) return
+    pauseCountdown()
+  }, [isRewarded, pauseCountdown, session])
+
   const requestClose = useCallback(() => {
     if (!session || isSubmitting) return
     if (isRewarded) return
@@ -148,8 +158,7 @@ export function useRewardedAdUnlock({
 
   const continueWatching = useCallback(() => {
     setShowCloseConfirm(false)
-    startCountdown()
-  }, [startCountdown])
+  }, [])
 
   const cancel = useCallback(async () => {
     if (!session || isSubmitting) return
@@ -203,11 +212,6 @@ export function useRewardedAdUnlock({
   }, [complete, isRewarded, requestClose])
 
   useEffect(() => {
-    if (!session || showCloseConfirm || isRewarded) return
-    startCountdown()
-  }, [isRewarded, session, showCloseConfirm, startCountdown])
-
-  useEffect(() => {
     if (session && (session.dramaId !== dramaId || session.episodeNo !== episodeNo)) {
       void cancel()
     }
@@ -238,5 +242,7 @@ export function useRewardedAdUnlock({
     close,
     cancel,
     continueWatching,
+    startPlayback,
+    pausePlayback,
   }
 }

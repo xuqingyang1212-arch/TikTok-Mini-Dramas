@@ -90,15 +90,16 @@ export const miniApi = {
       body: JSON.stringify({ userId }),
     }),
 
-  getPaywall: (dramaId: string, userId?: string, appId?: string, options?: RequestInit) => {
+  getPaywall: (dramaId: string, userId?: string, appId?: string, currentEpisode?: number, options?: RequestInit) => {
     const params = new URLSearchParams()
     if (userId) params.set("userId", userId)
     if (appId) params.set("appId", appId)
+    if (currentEpisode !== undefined) params.set("currentEpisode", String(currentEpisode))
     const qs = params.toString()
     return request<PaywallData>(`/dramas/${encodePathSegment(dramaId)}/paywall${qs ? `?${qs}` : ""}`, options)
   },
 
-  createUnlockOrder: (userId: string, dramaId: string, tierKey: string, options?: RequestInit) =>
+  createUnlockOrder: (userId: string, dramaId: string, tierKey: string, currentEpisode: number, options?: RequestInit) =>
     request<UnlockOrder>("/orders/unlock", {
       ...options,
       method: "POST",
@@ -106,6 +107,7 @@ export const miniApi = {
         userId,
         dramaId,
         tierKey,
+        currentEpisode,
         deviceOs: getDeviceOs(),
       }),
     }),

@@ -74,7 +74,6 @@ export function VideoPlayer({
   const [duration, setDuration] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
-  const [showUnlockSequenceTip, setShowUnlockSequenceTip] = useState(false)
   const [adErrorMessage, setAdErrorMessage] = useState("")
 
   const [translateY, setTranslateY] = useState(0)
@@ -86,7 +85,6 @@ export function VideoPlayer({
   const progressBarRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
   const swipeDistance = useRef(0)
-  const unlockSequenceTipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const adErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const transitionTimerRef = useRef<number | null>(null)
   const swipeResetTimerRef = useRef<number | null>(null)
@@ -98,12 +96,6 @@ export function VideoPlayer({
 
   const sortedEpisodes = useMemo(() => normalizeEpisodeList(episodes), [episodes])
   const { prevEpisode, currentEpisodeData: episode, nextEpisodeData } = getAdjacentEpisodes(sortedEpisodes, currentEpisode)
-
-  const firstLockedEpisodeNo = useMemo(() => {
-    const lockedEpisodes = episodes.filter((ep) => ep.isUnlocked === false)
-    if (lockedEpisodes.length === 0) return null
-    return Math.min(...lockedEpisodes.map((ep) => ep.episodeNo))
-  }, [episodes])
 
   const isCurrentEpisodeLocked = Boolean(episode && episode.isUnlocked === false)
   const isIaa = monetizationType === "IAA"
@@ -152,7 +144,6 @@ export function VideoPlayer({
 
   useEffect(() => {
     return () => {
-      if (unlockSequenceTipTimer.current) clearTimeout(unlockSequenceTipTimer.current)
       if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current)
       if (swipeResetTimerRef.current) clearTimeout(swipeResetTimerRef.current)
       if (paySuccessTimerRef.current) clearTimeout(paySuccessTimerRef.current)
@@ -192,6 +183,13 @@ export function VideoPlayer({
     const result = await rewardedAd.start()
     if (result !== "failed") return
 
+    setAdErrorMessage(t("player.adStartFailed"))
+    if (adErrorTimerRef.current) clearTimeout(adErrorTimerRef.current)
+    adErrorTimerRef.current = setTimeout(() => setAdErrorMessage(""), 2400)
+  }
+
+  const handleAdPlaybackError = async () => {
+    await rewardedAd.cancel()
     setAdErrorMessage(t("player.adStartFailed"))
     if (adErrorTimerRef.current) clearTimeout(adErrorTimerRef.current)
     adErrorTimerRef.current = setTimeout(() => setAdErrorMessage(""), 2400)
@@ -412,21 +410,6 @@ export function VideoPlayer({
 
   // Select episode from list
   const selectEpisode = (ep: Episode) => {
-    const isLockedAfterNextUnlock =
-      ep.isUnlocked === false &&
-      firstLockedEpisodeNo !== null &&
-      ep.episodeNo > firstLockedEpisodeNo
-
-    if (isLockedAfterNextUnlock) {
-      setShowUnlockSequenceTip(true)
-      if (unlockSequenceTipTimer.current) clearTimeout(unlockSequenceTipTimer.current)
-      unlockSequenceTipTimer.current = setTimeout(() => {
-        setShowUnlockSequenceTip(false)
-      }, 2400)
-      return
-    }
-
-    setShowUnlockSequenceTip(false)
     setShowEpisodeList(false)
     if (ep.episodeNo !== currentEpisode) {
       setCurrentEpisode(ep.episodeNo)
@@ -670,7 +653,6 @@ export function VideoPlayer({
           episodeTabs={episodeTabs}
           visibleEpisodes={visibleEpisodes}
           gridSlots={gridSlots}
-          showUnlockSequenceTip={showUnlockSequenceTip}
           onClose={() => setShowEpisodeList(false)}
           onSelectEpisode={selectEpisode}
           onTabChange={setActiveTab}
@@ -698,7 +680,6 @@ export function VideoPlayer({
 
       {rewardedAd.session && (
         <RewardedAdOverlay
-          session={rewardedAd.session}
           remainingSeconds={rewardedAd.remainingSeconds}
           isRewarded={rewardedAd.isRewarded}
           isSubmitting={rewardedAd.isSubmitting}
@@ -706,6 +687,9 @@ export function VideoPlayer({
           onClose={rewardedAd.close}
           onCancel={() => void rewardedAd.cancel()}
           onContinue={rewardedAd.continueWatching}
+          onPlaybackStart={rewardedAd.startPlayback}
+          onPlaybackPause={rewardedAd.pausePlayback}
+          onPlaybackError={() => void handleAdPlaybackError()}
         />
       )}
     </div>

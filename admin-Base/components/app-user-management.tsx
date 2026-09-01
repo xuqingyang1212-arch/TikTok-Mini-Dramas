@@ -257,7 +257,7 @@ export default function AppUserManagement() {
 }
 
 // ─────────────── User Detail Drawer ───────────────
-type DetailTab = "subscription" | "unlock" | "watch"
+type DetailTab = "subscription" | "beansUnlock" | "adUnlock" | "watch"
 
 function UserDetailDrawer({
   user,
@@ -271,7 +271,8 @@ function UserDetailDrawer({
   const tabs: { key: DetailTab; label: string }[] = [
     { key: "watch", label: "观看记录" },
     { key: "subscription", label: "会员订阅" },
-    { key: "unlock", label: "Beans解锁" },
+    { key: "beansUnlock", label: "Beans解锁" },
+    { key: "adUnlock", label: "广告解锁" },
   ]
 
   const infoItems = [
@@ -319,6 +320,7 @@ function UserDetailDrawer({
       {/* Tab content：每个 tab 独立分页加载 */}
       {tab === "subscription" && (
         <DetailTab
+          key="subscription"
           userId={user.id}
           columns={["订阅周期", "订阅金额", "时间", "关联订单号"]}
           monoCols={[3]}
@@ -331,24 +333,40 @@ function UserDetailDrawer({
           ]}
         />
       )}
-      {tab === "unlock" && (
+      {tab === "beansUnlock" && (
         <DetailTab
+          key="beans"
           userId={user.id}
-          columns={["剧集名称", "解锁方式", "集数", "消耗Beans", "时间", "关联凭证"]}
-          monoCols={[5]}
-          fetcher={(params) => appUserApi.unlocks(user.id, params)}
+          columns={["剧集名称", "解锁集数", "消耗Beans", "解锁时间", "关联订单号"]}
+          monoCols={[4]}
+          fetcher={(params) => appUserApi.unlocks(user.id, { ...params, unlockType: "beans" })}
           mapRow={(u: UnlockRecord) => [
             u.dramaName || "-",
-            UNLOCK_TYPE_LABEL[u.unlockType] || u.unlockType || "-",
             formatEpisodes(u.unlockCount, u.episodes),
-            u.unlockType === "beans" ? String(u.beansCost) : "-",
+            String(u.beansCost),
             formatDateTime(u.unlockedAt),
-            u.orderNo || u.adSessionNo || "-",
+            u.orderNo || "-",
+          ]}
+        />
+      )}
+      {tab === "adUnlock" && (
+        <DetailTab
+          key="ad"
+          userId={user.id}
+          columns={["剧集名称", "解锁集数", "解锁时间", "广告会话号"]}
+          monoCols={[3]}
+          fetcher={(params) => appUserApi.unlocks(user.id, { ...params, unlockType: "ad" })}
+          mapRow={(u: UnlockRecord) => [
+            u.dramaName || "-",
+            formatEpisodes(u.unlockCount, u.episodes),
+            formatDateTime(u.unlockedAt),
+            u.adSessionNo || "-",
           ]}
         />
       )}
       {tab === "watch" && (
         <DetailTab
+          key="watch"
           userId={user.id}
           columns={["剧集名称", "集数", "解锁方式", "时间"]}
           fetcher={(params) => appUserApi.watchLogs(user.id, params)}

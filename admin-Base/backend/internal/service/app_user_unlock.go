@@ -29,27 +29,30 @@ const unlockRecordsQuery = `
 		WHERE app_id = ? AND user_id = ? AND pay_status = 'paid' AND order_type = 'unlock'
 		UNION ALL
 		SELECT 'ad' AS unlock_type, u.id AS sort_id, u.drama_id, 1 AS unlock_count,
-		       CAST(u.episode_no AS CHAR) AS episode_list, 0 AS beans_cost,
+		       CAST(u.episode_no AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS episode_list, 0 AS beans_cost,
 		       u.created_at AS unlocked_at, '' AS order_no,
 		       COALESCE(s.session_no, '') AS ad_session_no
 		FROM user_unlocks u
 		LEFT JOIN ad_unlock_sessions s ON s.id = u.ad_session_id
 		WHERE u.app_id = ? AND u.user_id = ? AND u.unlock_type = 'ad'
-	) AS unlock_records
-	ORDER BY unlocked_at DESC, unlock_type ASC, sort_id DESC`
+	) AS unlock_records`
 
-func (s *appUserService) queryUnlockRecords(appID, userID int64, limit, offset int) ([]AppUserUnlockRecord, int64, error) {
+func (s *appUserService) queryUnlockRecords(appID, userID int64, unlockType string, limit, offset int) ([]AppUserUnlockRecord, int64, error) {
 	var beansTotal int64
-	if err := s.db.Model(&model.PaymentOrder{}).
-		Where("app_id = ? AND user_id = ? AND pay_status = ? AND order_type = ?", appID, userID, "paid", "unlock").
-		Count(&beansTotal).Error; err != nil {
-		return nil, 0, err
+	if unlockType == "" || unlockType == unlockTypeBeans {
+		if err := s.db.Model(&model.PaymentOrder{}).
+			Where("app_id = ? AND user_id = ? AND pay_status = ? AND order_type = ?", appID, userID, "paid", "unlock").
+			Count(&beansTotal).Error; err != nil {
+			return nil, 0, err
+		}
 	}
 	var adTotal int64
-	if err := s.db.Model(&model.UserUnlock{}).
-		Where("app_id = ? AND user_id = ? AND unlock_type = ?", appID, userID, unlockTypeAd).
-		Count(&adTotal).Error; err != nil {
-		return nil, 0, err
+	if unlockType == "" || unlockType == unlockTypeAd {
+		if err := s.db.Model(&model.UserUnlock{}).
+			Where("app_id = ? AND user_id = ? AND unlock_type = ?", appID, userID, unlockTypeAd).
+			Count(&adTotal).Error; err != nil {
+			return nil, 0, err
+		}
 	}
 	total := beansTotal + adTotal
 	if total == 0 {
@@ -58,6 +61,11 @@ func (s *appUserService) queryUnlockRecords(appID, userID int64, limit, offset i
 
 	query := unlockRecordsQuery
 	args := []any{appID, userID, appID, userID}
+	if unlockType != "" {
+		query += " WHERE unlock_type = ?"
+		args = append(args, unlockType)
+	}
+	query += " ORDER BY unlocked_at DESC, unlock_type ASC, sort_id DESC"
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		args = append(args, limit, offset)

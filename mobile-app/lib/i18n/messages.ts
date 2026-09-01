@@ -38,7 +38,6 @@ export const zhMessages = {
   "player.adExit": "退出广告",
   "player.adExiting": "退出中...",
   "player.episodeProgress": "第{current}集 / 共{total}集",
-  "player.unlockSequenceTip": "之前的剧集也很精彩。按顺序解锁，不要错过!",
   "player.totalEpisodes": "共{count}集",
 
   "payment.price": "价格：",
@@ -144,7 +143,6 @@ export const enMessages: Record<TranslationKey, string> = {
   "player.adExit": "Exit ad",
   "player.adExiting": "Exiting...",
   "player.episodeProgress": "EP.{current} / EP.{total}",
-  "player.unlockSequenceTip": "The earlier episodes are great too. Unlock them in order so you don't miss anything!",
   "player.totalEpisodes": "{count} Episodes",
 
   "payment.price": "Price: ",

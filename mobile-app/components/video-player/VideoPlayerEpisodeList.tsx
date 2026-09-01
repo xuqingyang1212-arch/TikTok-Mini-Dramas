@@ -18,7 +18,6 @@ interface VideoPlayerEpisodeListProps {
   episodeTabs: EpisodeTab[]
   visibleEpisodes: Episode[]
   gridSlots: Array<Episode | null>
-  showUnlockSequenceTip: boolean
   onClose: () => void
   onSelectEpisode: (episode: Episode) => void
   onTabChange: (index: number) => void
@@ -33,7 +32,6 @@ export function VideoPlayerEpisodeList({
   episodeTabs,
   visibleEpisodes,
   gridSlots,
-  showUnlockSequenceTip,
   onClose,
   onSelectEpisode,
   onTabChange,
@@ -51,18 +49,6 @@ export function VideoPlayerEpisodeList({
       className="absolute inset-0 bg-black/60 z-30"
       onClick={onClose}
     >
-      {showUnlockSequenceTip && (
-        <div
-          className="pointer-events-none absolute left-4 right-4 z-40 flex justify-center animate-fade-in"
-          style={{ bottom: `calc(${drawerHeight}px + env(safe-area-inset-bottom, 0px) + 14px)` }}
-        >
-          <div className="flex max-w-[360px] items-center gap-2 rounded-xl border border-[#ff9a3d]/25 bg-[#251e18]/95 px-4 py-3 text-[14px] leading-5 text-white/90 shadow-[0_8px_28px_rgba(0,0,0,0.42)] backdrop-blur-md">
-            <LockKeyhole size={18} className="flex-shrink-0 text-[#f6a240]" />
-            <span>{t("player.unlockSequenceTip")}</span>
-          </div>
-        </div>
-      )}
-
       <div
         className="absolute bottom-0 left-0 right-0 animate-slide-up rounded-t-2xl border-t border-[#ff9a3d]/15 bg-[#16130f] shadow-[0_-12px_36px_rgba(0,0,0,0.45)]"
         style={{

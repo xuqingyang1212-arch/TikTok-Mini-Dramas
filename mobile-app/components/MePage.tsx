@@ -133,9 +133,9 @@ export function MePage({ userId, monetizationType, onOpenPurchaseRecords, onLogo
           <div className="flex items-center gap-4">
             <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/35 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
               <img
-                src="/assets/brand/app-logo.png"
+                src="/assets/user/default-avatar.png"
                 alt={t("common.defaultAvatar")}
-                className="h-[118%] w-[118%] max-w-none translate-x-[2%] translate-y-[3%] object-contain"
+                className="h-full w-full object-cover"
                 draggable={false}
               />
             </div>

@@ -98,7 +98,7 @@ type AppUserService interface {
 	GetByID(id int64) (*model.AppUser, error)
 	Detail(id int64) (*AppUserDetail, error)
 	Subscriptions(id int64, page, pageSize int) ([]AppUserSubscriptionRecord, int64, error)
-	Unlocks(id int64, page, pageSize int) ([]AppUserUnlockRecord, int64, error)
+	Unlocks(id int64, unlockType string, page, pageSize int) ([]AppUserUnlockRecord, int64, error)
 	WatchLogs(id int64, page, pageSize int) ([]AppUserWatchRecord, int64, error)
 	Create(input CreateAppUserInput) (*model.AppUser, error)
 	GetOrCreateByOpenID(appID int64, openID string) (*model.AppUser, bool, error)
@@ -319,7 +319,7 @@ func (s *appUserService) Detail(id int64) (*AppUserDetail, error) {
 	detail.Subscriptions = subscriptionRecords
 
 	// ── 永久解锁记录（Beans 按订单、广告按单集）──
-	unlockRecords, _, err := s.queryUnlockRecords(user.AppID, id, 0, 0)
+	unlockRecords, _, err := s.queryUnlockRecords(user.AppID, id, "", 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -335,15 +335,15 @@ func (s *appUserService) Detail(id int64) (*AppUserDetail, error) {
 	return detail, nil
 }
 
-// Unlocks 分页返回用户的 Beans 与广告永久解锁记录。
-func (s *appUserService) Unlocks(id int64, page, pageSize int) ([]AppUserUnlockRecord, int64, error) {
+// Unlocks 分页返回用户指定类型的永久解锁记录。
+func (s *appUserService) Unlocks(id int64, unlockType string, page, pageSize int) ([]AppUserUnlockRecord, int64, error) {
 	pg, size := normalizePage(page, pageSize)
 
 	var user model.AppUser
 	if err := s.db.Select("id", "app_id").First(&user, id).Error; err != nil {
 		return nil, 0, err
 	}
-	return s.queryUnlockRecords(user.AppID, id, size, (pg-1)*size)
+	return s.queryUnlockRecords(user.AppID, id, unlockType, size, (pg-1)*size)
 }
 
 func (s *appUserService) Create(in CreateAppUserInput) (*model.AppUser, error) {

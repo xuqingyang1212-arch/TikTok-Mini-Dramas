@@ -122,6 +122,7 @@ function paywallReducer(state: PaywallState, action: PaywallAction): PaywallStat
 export function PaywallPanel({
   dramaId,
   userId,
+  currentEpisode,
   onClose,
   onPaySuccess,
   appId,
@@ -140,7 +141,7 @@ export function PaywallPanel({
     dispatch({ type: "load" })
 
     try {
-      const data = await miniApi.getPaywall(dramaId, userId, appId, { signal: controller.signal })
+      const data = await miniApi.getPaywall(dramaId, userId, appId, currentEpisode, { signal: controller.signal })
       if (!controller.signal.aborted) {
         dispatch({ type: "load_success", paywall: data })
       }
@@ -161,7 +162,7 @@ export function PaywallPanel({
         window.clearTimeout(successTimerRef.current)
       }
     }
-  }, [dramaId, userId, appId])
+  }, [dramaId, userId, appId, currentEpisode])
 
   const beansOptions = useMemo<BeansOption[]>(() => {
     if (!state.paywall) return []
@@ -198,7 +199,7 @@ export function PaywallPanel({
     dispatch({ type: "submit_start", processingTextKey: "payment.creatingOrder" })
 
     try {
-      const order = await miniApi.createUnlockOrder(userId, dramaId, option.key, { signal: controller.signal })
+      const order = await miniApi.createUnlockOrder(userId, dramaId, option.key, currentEpisode, { signal: controller.signal })
       if (controller.signal.aborted) return
       dispatch({ type: "submit_success", orderNo: order.orderNo })
     } catch (error) {
