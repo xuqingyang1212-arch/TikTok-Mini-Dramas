@@ -1,361 +1,250 @@
-# 后台脚手架 — 技术架构文档
+# 管理后台架构设计与开发规范
 
-## 一、系统概览
+> 适用范围：本目录中的 Next.js 管理后台，不包含 `backend/`。本文是管理后台后续功能迭代的约束文档；新增页面或功能必须遵守，确需偏离时应先更新本文并说明原因。
 
-"后台脚手架"是一套「前端 Next.js + 后端 Gin + MySQL」的运营后台骨架，内置：登录（邮箱 + 验证码）、JWT 鉴权、RBAC 权限体系、用户/角色管理、统一响应格式、分页与筛选的标准写法、以及一套落在 `.cursor/rules/design-system.mdc` 的全局 UI 规范。
+## 1. 架构目标
 
-所有业务功能均已剥离，仅保留「系统设置 → 用户管理 / 角色管理」作为脚手架样板。后续新项目基于本脚手架扩展业务模块即可。
+管理后台采用 Next.js App Router + React + TypeScript 的模块化前端架构：
+
+- 菜单、页面注册和前端权限使用单一真相源。
+- HTTP、格式化、筛选、分页和公共交互组件集中复用。
+- 业务组件负责页面状态与业务交互，不重复实现基础设施。
+- 前端权限只改善体验，服务端权限才是安全边界。
 
 ```mermaid
 flowchart LR
-  subgraph client [前端]
-    NextJS["Next.js 16 + React 19"]
-  end
-  subgraph server [后端]
-    Gin["Go Gin Server :8080"]
-  end
-  subgraph storage [存储]
-    MySQL["MySQL 8.0"]
-  end
-  NextJS -->|"HTTP /api/v1"| Gin
-  Gin --> MySQL
+    App[App Router] --> Layout[后台布局]
+    Layout --> Registry[菜单注册表]
+    Registry --> Page[业务页面组件]
+    Page --> Hooks[共享 Hooks]
+    Page --> Shared[共享组件]
+    Page --> API[API Service]
+    API --> Client[统一 API Client]
+    Client --> Server[Go /api/v1]
 ```
 
-## 二、单一真相源（架构核心）
+## 2. 目录职责
 
-脚手架把"新增一个业务模块"的改动点压缩到最少 —— 前后端各有一个文件作为权威声明，其他地方全部派生。
-
-```mermaid
-flowchart TB
-  subgraph fe [Frontend]
-    registry["lib/menu-registry.tsx · 单一真相源"]
-    registry -->|getMenuTree| layout["admin-layout.tsx · 侧边栏菜单"]
-    registry -->|getPermissionMap / getParentChildren / getLeafOrder| perms["lib/permissions.ts"]
-    registry -->|getComponentByKey| ca["content-area.tsx · 路由分发"]
-  end
-
-  subgraph be [Backend]
-    consts["internal/consts/permissions.go · 单一真相源"]
-    consts -->|PermissionTree| tree["handler GetPermissionTree"]
-    consts -->|常量引用| router["router.go RequirePerm(consts.Xxx)"]
-    consts -->|AllLeafKeys| sync["main.go 启动时超管权限同步"]
-  end
-```
-
-## 三、技术栈
-
-### 前端
-
-- **框架**: Next.js 16.2 (App Router, Turbopack) + React 19.2
-- **语言**: TypeScript 5.7 (strict mode)
-- **样式**: Tailwind CSS 4.2 + tw-animate-css，PostCSS 经由 `@tailwindcss/postcss`
-- **图标**: Lucide React
-- **工具**: `clsx` + `tailwind-merge` 封装为 `cn()`
-- **路径别名**: `@/*` → 项目根目录
-- **设计原则**: 自研的轻量 UI 层，不引入 shadcn/ui / Radix / react-hook-form 等重量级依赖；所有筛选/弹窗/抽屉均由 `components/shared` 提供。
-
-### 后端
-
-- **语言**: Go 1.22+
-- **框架**: Gin 1.10
-- **ORM**: GORM 1.25 + MySQL Driver
-- **认证**: JWT (HS256, `golang-jwt/jwt/v5`)
-- **跨域**: gin-contrib/cors
-
-### 数据库
-
-- **MySQL 8.0**, 默认库名 `scaffold_admin_template`, 字符集 `utf8mb4`
-
-## 四、项目目录结构
-
-```
-后台脚手架/
-├── app/                        # Next.js App Router
-│   ├── layout.tsx              # 根布局
-│   ├── page.tsx                # 首页 → AdminLayout
-│   ├── login/page.tsx          # 登录页（邮箱 + 验证码）
-│   └── globals.css             # 全局样式
-├── components/                 # 业务组件
-│   ├── admin-layout.tsx        # 主框架（认证/权限/菜单/路由）
-│   ├── sidebar.tsx             # 侧边栏
-│   ├── header.tsx              # 顶部栏
-│   ├── content-area.tsx        # 按 selectedKey 动态加载业务页（registry 驱动）
-│   ├── user-management.tsx     # 用户管理
-│   ├── role-management.tsx     # 角色管理
-│   ├── list-pagination.tsx     # 分页组件
-│   ├── global-toast.tsx        # 全局 Toast
-│   └── shared/                 # 复用业务组件
-│       ├── filter-input.tsx    # 筛选：文本框
-│       ├── filter-bar.tsx      # 筛选：统一筛选栏（等宽网格，行列对齐，minColWidth 默认 300）
-│       ├── select-filter.tsx   # 筛选：下拉单选
-│       ├── multi-select-filter.tsx # 筛选：下拉多选
-│       ├── date-range-picker.tsx   # 筛选：日期区间（双月并行）
-│       ├── status-badge.tsx    # 状态标签
-│       ├── confirm-dialog.tsx  # 确认弹窗
-│       ├── right-drawer.tsx    # 右侧抽屉
-│       ├── field-error.tsx     # 字段级错误提示
-│       └── index.ts            # barrel export
-├── hooks/
-│   ├── use-filters.ts          # 筛选 draft/active 双态
-│   └── use-pagination.ts       # 分页状态
+```text
+admin-Base/
+├── app/                    # App Router、根布局、登录页和全局样式
+├── components/             # 业务页面和后台框架组件
+│   └── shared/             # 与业务领域无关的通用 UI 组件
+├── hooks/                  # 分页、筛选、下拉数据等复用状态逻辑
 ├── lib/
-│   ├── menu-registry.tsx       # ★ 菜单/权限/路由分发单一真相源
-│   ├── api.ts                  # API 接口聚合（authApi / userApi / roleApi）
-│   ├── api-client.ts           # Token & request 封装
-│   ├── permissions.ts          # 派生自 menu-registry
-│   ├── toast.ts                # Toast 发布订阅
-│   ├── format.ts               # 日期等格式化
-│   ├── types.ts                # 共享类型
-│   └── utils.ts                # cn() 工具
-├── public/                     # icon 资源
-├── .cursor/rules/              # 设计规范（跟随仓库）
-│   └── design-system.mdc
-├── backend/                    # Go 后端
-│   ├── cmd/server/main.go      # 入口（启动做超管权限 sync）
-│   ├── config.yaml.example     # 配置示例
-│   ├── internal/
-│   │   ├── config/config.go    # 配置类型 + DSN
-│   │   ├── consts/
-│   │   │   ├── status.go       # 用户状态枚举
-│   │   │   └── permissions.go  # ★ 权限 key 常量 + 权限树 + AllLeafKeys
-│   │   ├── handler/            # 薄层 handler（只做 bind + 调 service + 响应）
-│   │   │   ├── router.go       # 路由表（RequirePerm 引用 consts 常量）
-│   │   │   ├── auth.go         # 登录 / 发送验证码
-│   │   │   ├── user.go         # 用户 CRUD
-│   │   │   ├── role.go         # 角色 + 权限树（直接返回 consts.PermissionTree）
-│   │   │   ├── context.go      # Svc 注入
-│   │   │   └── helpers.go      # Bind / ParseID / TrimQuery
-│   │   ├── middleware/
-│   │   │   ├── jwt.go          # JWT 签发/验证
-│   │   │   ├── loadperms.go    # 加载用户权限缓存
-│   │   │   ├── session.go      # 会话（单设备登录）
-│   │   │   ├── permission.go   # RequirePerm
-│   │   │   └── dedup.go        # 写请求去重
-│   │   ├── model/
-│   │   │   ├── db.go           # GORM 初始化 + AutoMigrate
-│   │   │   └── user.go         # User / Role / UserRole / RolePermission
-│   │   ├── service/            # 业务逻辑层
-│   │   │   ├── service.go      # DI 聚合
-│   │   │   ├── user.go         # List / Create / Update / GetByID / GetByEmail
-│   │   │   └── role.go         # List / Create / Update / SyncSuperAdminPermissions
-│   │   └── pkg/
-│   │       ├── response/       # 统一响应
-│   │       └── pagination/     # 分页解析
-│   └── migrations/             # SQL 迁移（仅账号种子，不含权限点）
-│       ├── 001_init.up.sql
-│       └── 001_init.down.sql
-├── next.config.mjs
-├── tsconfig.json
-├── pnpm-lock.yaml
-└── package.json
+│   ├── menu-registry.tsx   # 菜单、页面和前端权限单一真相源
+│   ├── api-client.ts       # Token、请求、响应和错误处理
+│   ├── api.ts              # 按领域组织的接口方法
+│   ├── format.ts           # UTC 时间和展示格式
+│   ├── permissions.ts      # 从注册表派生的权限结构
+│   └── types.ts            # 跨页面共享类型
+├── public/                 # 静态资源
+└── backend/                # 独立 Go 服务端项目
 ```
 
-## 五、数据库设计
+依赖方向：
 
-### ER 关系
-
-```mermaid
-erDiagram
-    users ||--o{ user_roles : "has"
-    roles ||--o{ user_roles : "has"
-    roles ||--o{ role_permissions : "has"
+```text
+app/layout → menu registry → business components
+business components → hooks/shared/lib
+hooks → lib
+api.ts → api-client.ts
 ```
 
-### 数据表（4 张，仅账号体系）
+`lib` 和共享组件不得反向依赖具体业务页面。
 
-- **users** — 用户，email 唯一，状态 启用/禁用
-- **roles** — 角色，name 唯一
-- **user_roles** — 用户-角色关联（多对多）
-- **role_permissions** — 角色-权限（存放 `module.entity.action` 的权限 key）
+## 3. 菜单、路由与权限单一真相源
 
-表结构由 GORM AutoMigrate 创建；`001_init.up.sql` 只种入默认超管账号 + 角色，权限点由后端启动时自动同步。
+[lib/menu-registry.tsx](./lib/menu-registry.tsx) 是前端业务菜单的唯一声明位置，并派生：
 
-## 六、API 接口
+- 侧边栏菜单。
+- 页面组件分发。
+- 面包屑或父子关系。
+- 权限映射。
+- 叶子节点顺序。
 
-### 统一响应格式
+新增管理页面时：
 
-```json
-{ "code": 0, "message": "success", "data": {} }
+1. 创建业务页面组件。
+2. 在 `menuRegistry` 对应分组添加 `{ key, label, permission, component }`。
+3. 在服务端 `internal/consts/permissions.go` 声明匹配的权限 key。
+4. 在服务端路由使用 `RequirePerm` 保护接口。
+
+禁止再到布局、侧边栏和内容分发组件中分别维护相同页面配置。
+
+前端按钮隐藏不是授权机制。新增、编辑、删除、导出等敏感操作必须有服务端权限校验。
+
+## 4. API 访问规范
+
+### 4.1 统一传输层
+
+所有后台请求必须通过 [lib/api-client.ts](./lib/api-client.ts)，统一处理：
+
+- API Base URL。
+- JWT Token。
+- JSON 编解码。
+- HTTP 和业务错误。
+- 登录失效处理。
+- 请求选项。
+
+禁止在业务组件中散落原生 `fetch`、重复拼 Token 或自行解析不同响应格式。
+
+### 4.2 领域 API
+
+接口方法集中在 [lib/api.ts](./lib/api.ts)，按应用、短剧、用户、订单、订阅等领域组织。页面只调用语义化方法，不拼接接口路径。
+
+新增或修改接口时必须：
+
+- 同步 TypeScript 请求/响应类型。
+- 保持服务端字段命名一致。
+- 将可选查询条件明确序列化。
+- 不把异常转换为空数据；由页面统一展示失败状态。
+
+### 4.3 媒体和时间
+
+- 媒体相对路径通过公共方法转换成可访问 URL。
+- API 时间按 UTC 解析。
+- 后台统一以 `Asia/Shanghai` 显示到秒。
+- 日期筛选按中国运营日转换为 UTC 左闭右开区间。
+- 禁止页面自行截取时间字符串或手写时区偏移。
+
+格式化入口：[lib/format.ts](./lib/format.ts)。
+
+## 5. 页面与状态设计
+
+### 5.1 页面组件
+
+一个业务页面通常只负责：
+
+- 字段和列定义。
+- 筛选条件组合。
+- 调用领域 API。
+- 打开表单、确认框或详情抽屉。
+- 展示成功和失败反馈。
+
+当组件同时承担大量请求、转换、表格、抽屉和状态机逻辑时，应优先拆出 Hook、子组件或领域工具，而不是继续扩大单文件。
+
+### 5.2 分页与筛选
+
+列表页面优先使用：
+
+- [hooks/use-paged-query.ts](./hooks/use-paged-query.ts)：请求、分页、刷新、加载和错误状态。
+- [hooks/use-filters.ts](./hooks/use-filters.ts)：筛选草稿与已应用条件。
+- [hooks/use-pagination.ts](./hooks/use-pagination.ts)：只需要分页状态时使用。
+
+规则：
+
+- 页码和每页数量是请求状态的一部分。
+- 应用新筛选时回到第一页。
+- 切换不同详情 Tab 时应使用独立 key 或状态，避免分页串用。
+- 请求错误必须可见，不能静默显示为空列表。
+- 服务端必须在数据库分页之前应用筛选。
+
+### 5.3 下拉数据
+
+应用和短剧等跨页面下拉选项使用：
+
+- [hooks/use-app-options.ts](./hooks/use-app-options.ts)
+- [hooks/use-drama-options.ts](./hooks/use-drama-options.ts)
+
+新增可复用字典或级联选项时，应建立相同模式的 Hook，统一加载、转换和错误处理，不在多个页面复制请求。
+
+## 6. 共享组件规范
+
+通用后台交互位于 [components/shared/](./components/shared)：
+
+- `confirm-dialog` / `popconfirm`：危险操作确认。
+- `right-drawer`：详情和编辑抽屉。
+- `fixed-header-table`：固定表头表格。
+- `filter-bar`、`filter-input`、`select-filter`：筛选区域。
+- `date-range-picker`：运营日期范围。
+- `form-input`、`form-select`、`field-error`：表单和字段错误。
+- `status-badge`：状态展示。
+- `column-settings`：列配置。
+
+新增组件前先判断是否为通用能力：
+
+- 通用能力放 `components/shared`，API 应保持领域无关。
+- 业务专用组件放对应业务组件附近。
+- 不为一个页面复制已有弹窗、抽屉、筛选栏或分页实现。
+
+## 7. 业务展示规范
+
+### 用户权益记录
+
+用户详情必须区分业务来源：
+
+- Beans 解锁独立 Tab，展示“关联订单号”。
+- 广告解锁独立 Tab，展示“广告会话号”。
+- 会员记录、观看记录保持独立分页。
+
+禁止在 Beans 页面显示广告会话号，或使用“关联凭证”等含义不清的字段名。
+
+### IAA/IAP 配置
+
+- 应用变现模式是应用级配置，值为 `IAA` 或 `IAP`。
+- IAA 展示广告位相关配置。
+- IAP 展示 Beans、付费卡点和订阅配置。
+- 切换变现模式时应明确提示对既有流程的影响。
+- 前端显隐规则必须与服务端约束一致，但不能替代服务端校验。
+
+## 8. TypeScript 与错误处理
+
+- 保持 TypeScript strict 模式。
+- API DTO 应显式定义，不使用 `any` 绕过接口变化。
+- 领域状态优先使用联合类型，例如 `"IAA" | "IAP"`。
+- 服务端返回的可空字段必须在类型中体现。
+- 用户可恢复错误使用 toast 或字段错误展示。
+- 破坏性操作必须确认，并在请求进行中防止重复提交。
+- 不吞掉 Promise rejection，也不以空数组伪装加载失败。
+
+## 9. 新功能开发流程
+
+新增一个后台模块时按以下顺序：
+
+1. 确认后端 API、权限 key、请求和响应 DTO。
+2. 在 `lib/types.ts` 或业务局部类型中定义类型。
+3. 在 `lib/api.ts` 增加语义化接口方法。
+4. 复用分页、筛选、选项和公共组件完成页面。
+5. 在 `menu-registry.tsx` 注册页面和权限。
+6. 对新增、修改、删除和导出操作确认服务端权限保护。
+7. 处理加载、空状态、失败状态和重复提交。
+8. 运行 TypeScript 检查与生产构建。
+
+### 禁止事项
+
+- 在业务组件中直接调用散落的 `fetch`。
+- 在多个文件重复维护菜单、页面映射或权限树。
+- 新写一套分页、抽屉、确认框或时间格式化逻辑。
+- 用前端隐藏按钮代替服务端授权。
+- 把 IAA 与 IAP 的业务记录混入同一个含义不清的列。
+- 将 API 错误静默转换为空列表。
+
+## 10. 验证要求
+
+管理后台变更至少运行：
+
+```bash
+cd admin-Base
+pnpm exec tsc --noEmit --incremental false
+pnpm run build
 ```
 
-分页接口：`data: { "total": 100, "list": [...] }`
+涉及交互或布局时，还应在浏览器验证：
 
-### 接口总览
+- 目标菜单和权限显隐。
+- 列表筛选、分页和刷新。
+- 表单校验和错误反馈。
+- 抽屉、确认框和危险操作。
+- `Asia/Shanghai` 时间展示。
+- 实际运行进程是否来自当前工作目录，避免旧开发进程造成错误判断。
 
-**公开接口**
+## 11. 演进边界
 
-- `POST /auth/send-code` — 发送邮箱验证码（本地开发固定为 `123456`）
-- `POST /auth/login` — 邮箱 + 验证码登录，返回 JWT
-- `GET /health` — 健康检查
+当前管理后台服务于演示环境，可以保持轻量组件体系和客户端页面分发。进入生产化阶段时，可以增加更完整的测试、监控和设计系统，但应继续保留：
 
-**需要 JWT**
-
-- `GET /users/me` — 当前用户信息 + 权限列表
-- `GET /users` / `POST /users` / `PUT /users/:id` — 用户管理
-- `GET /roles` / `POST /roles` / `PUT /roles/:id` — 角色管理
-- `GET /permissions/tree` — 权限树（给角色编辑页用，直接返回 `consts.PermissionTree`）
-
-## 七、认证与权限
-
-### 认证流程
-
-```mermaid
-sequenceDiagram
-    participant B as 浏览器
-    participant F as Next.js
-    participant A as Go API
-    participant D as MySQL
-    B->>A: POST /auth/send-code {email}
-    A->>D: 校验邮箱存在
-    A->>A: 生成验证码并缓存（5 分钟有效，本地固定 123456）
-    A-->>B: "验证码已发送"
-    B->>A: POST /auth/login {email, code}
-    A->>A: 校验验证码（单次使用）
-    A->>D: 查询用户
-    A-->>B: {token, user}
-    B->>B: localStorage.setItem("token")
-    B->>F: 跳转 /
-    B->>A: GET /users/me (Bearer token)
-    A->>A: JWTAuth → LoadSession → LoadPermissions
-    A-->>B: {user, permissions[]}
-    B->>B: PermContext.Provider value={perms}
-```
-
-### 权限控制
-
-**后端**: JWT 中间件 → 会话加载权限到 context → `RequirePerm(consts.Xxx)` 路由级校验。权限 key 全部引用 `internal/consts/permissions.go` 的常量，不允许硬编码字符串。
-
-**前端**:
-- **菜单可见性**: `lib/menu-registry.tsx` 的 `menuRegistry` 声明每个叶子节点的 `permission`；`lib/permissions.ts` 通过 `getPermissionMap` / `getParentChildren` 派生出映射，`AdminLayout` 按此过滤侧边栏。
-- **按钮级**: `usePerm(key)` hook 返回 boolean，组件内 `{canXxx && <Button />}` 控制可见。
-- **拦截规则**: 无权限菜单不显示，`selectedKey` 自动重定向到 `getFirstAllowedKey()`。
-
-### 启动权限同步
-
-`main.go` 启动时调用 `Svc.Role.SyncSuperAdminPermissions()`：以 `consts.AllLeafKeys()` 为准，把超管角色缺失的权限点补进 `role_permissions`。新增权限常量后重启后端即可生效，**无需写 SQL 迁移**。
-
-### 默认权限点
-
-脚手架默认仅内置「系统设置」模块的 6 个权限点（集中声明在 `internal/consts/permissions.go`）：
-
-- `system.user.list` / `system.user.add` / `system.user.edit`
-- `system.role.list` / `system.role.add` / `system.role.edit`
-
-### 默认角色
-
-- **超级管理员**: 拥有全部权限。`admin@admin.com` 被种子关联到该角色。
-- 其余角色由衍生项目按需添加。
-
-## 八、前端路由机制
-
-系统采用 **SPA 式 `selectedKey` 切换**，非 Next.js 文件路由：
-
-- `/` — `AdminLayout`（主框架）
-- `/login` — 登录页
-- 业务页面通过 `ContentArea` 基于 `selectedKey` 渲染；组件映射来自 `lib/menu-registry.tsx` 的 `getComponentByKey(key)`
-- 优势：切换页面不刷新，保持侧边栏/Header 状态；新增菜单不必再改 `content-area.tsx` 的 if/else 分发
-
-## 九、后端分层
-
-```
-HTTP 请求
-    ↓
-中间件链（JWT → Session → LoadPermissions → Dedup → RequirePerm）
-    ↓
-handler（参数绑定 + 校验 + 响应封装）  ← 薄层
-    ↓
-service（业务逻辑：事务、密码 hash、权限同步、软约束）
-    ↓
-model（GORM 调用）
-    ↓
-MySQL
-```
-
-**硬性规则**：handler 不得直接调 `model.DB` 做查询/写入；所有 DB 触点必须经 `Svc.User` / `Svc.Role`。helpers 层只保留 `BindOrFail` / `ParseID` / `TrimQuery`。
-
-## 十、环境配置
-
-### 前端 `.env.local`
-
-```
-NEXT_PUBLIC_API_BASE=http://127.0.0.1:8080/api/v1
-```
-
-### 后端 `config.yaml`（复制自 `config.yaml.example`）
-
-```yaml
-server:
-  port: 8080
-  mode: debug
-
-database:
-  host: 127.0.0.1
-  port: 3306
-  user: root
-  password: ""
-  dbname: scaffold_admin_template
-  charset: utf8mb4
-
-jwt:
-  secret: "change-me-to-a-random-string"
-  expire_hours: 24
-```
-
-## 十一、启动与部署
-
-### 初始化数据库
-
-```sh
-# 1. 启动后端一次让 AutoMigrate 建好表
-cd backend
-cp config.yaml.example config.yaml
-go run ./cmd/server           # 建完表即可 Ctrl+C
-
-# 2. 导入默认超管账号
-mysql -u root -p < migrations/001_init.up.sql
-
-# 3. 正式启动（第二次起动时会自动做超管权限同步）
-go run ./cmd/server
-```
-
-初始化完成后，即可使用 `admin@admin.com` 登录（本地开发验证码固定 `123456`，见 `backend/internal/handler/auth.go` 的 `devFixedLoginCode`）。
-
-### 开发环境
-
-```sh
-# 1. 启动后端
-cd backend
-go run ./cmd/server
-
-# 2. 启动前端
-pnpm install
-pnpm dev     # 监听 0.0.0.0:3000
-```
-
-### 局域网访问
-
-- 前端：`http://<内网 IP>:3000`
-- 后端：`http://<内网 IP>:8080`
-- 需配置：`next.config.mjs` 的 `allowedDevOrigins` + 防火墙放行 3000/8080 端口
-
-## 十二、基于脚手架扩展新业务的推荐步骤
-
-理想改动面：**前端改 1 文件 + 后端改 1 文件 + 新建 handler/service/model。**
-
-### 1. 后端
-
-1. **权限点**（改一处）：在 `backend/internal/consts/permissions.go` 的 `const` 追加权限 key，并挂进 `PermissionTree` 对应节点的 `Children`。
-2. **模型层**：`backend/internal/model/xxx.go` 新增 GORM 模型，挂进 `db.go` 的 `AutoMigrate`。
-3. **Service 层**：`backend/internal/service/xxx.go` 声明接口 + 实现；挂进 `service.Services`。
-4. **Handler 层**：`backend/internal/handler/xxx.go` 新建薄层 handler（仅做 bind + 调 Svc + 响应）。
-5. **路由**：`router.go` 注册路由，`RequirePerm(consts.XxxAction)` 引用常量。
-
-**无需**：再动种子 SQL — 启动时自动同步超管权限。
-
-### 2. 前端
-
-1. **菜单**（改一处）：在 `lib/menu-registry.tsx` 的 `menuRegistry` 追加菜单项，声明 `{ key, label, permission, component: lazyPage(...) }`。
-2. **业务组件**：在 `components/` 下新增 `xxx-management.tsx`（抄 `components/user-management.tsx` 为模板），严格遵循 `.cursor/rules/design-system.mdc` 的单卡片布局与按钮规范。
-3. **API**：在 `lib/api.ts` 追加 `xxxApi`。
-
-**无需**：改 `admin-layout.tsx`、`content-area.tsx`、`lib/permissions.ts`（全部从 registry 派生）。
+- 菜单和页面注册单一真相源。
+- 统一 API 客户端。
+- 前后端双层权限。
+- 公共 Hooks 和组件复用。
+- UTC 输入与中国运营时区展示的明确边界。

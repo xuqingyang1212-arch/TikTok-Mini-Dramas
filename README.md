@@ -211,8 +211,12 @@ pnpm dev
 
 ## 文档
 
+后续功能迭代必须遵守对应子项目的架构设计；确需调整架构时，应先更新文档并在代码变更中说明原因。
+
+- [管理后台架构设计与开发规范](admin-Base/ARCHITECTURE.md)
+- [服务端架构设计与开发规范](admin-Base/backend/ARCHITECTURE.md)
+- [小程序前端架构设计与开发规范](mobile-app/ARCHITECTURE.md)
 - [小程序 API 文档](admin-Base/docs/mini-api.md)
-- [后台架构说明](admin-Base/ARCHITECTURE.md)
 - [数据库初始化策略](admin-Base/backend/migrations/README.md)
 
 ## 验证命令
