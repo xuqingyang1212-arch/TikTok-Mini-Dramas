@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, FormSelect, FilterBar, FilterActions, RightDrawer, FixedHeaderTable, thClass } from "@/components/shared"
+import { FilterInput, SelectFilter, FormSelect, FilterBar, FilterActions, RightDrawer, FixedHeaderTable, ConfirmDialog, thClass } from "@/components/shared"
 import { appApi } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { usePerm } from "@/components/admin-layout"
@@ -118,6 +118,8 @@ function AppDrawer({
   ))
   const [errors, setErrors] = useState<AppFormErrors>({})
   const [submitting, setSubmitting] = useState(false)
+  const [pendingForm, setPendingForm] = useState<AppForm | null>(null)
+  const isSwitchingMode = Boolean(isEdit && app && form.monetizationType !== app.monetizationType)
 
   function setField<K extends keyof AppForm>(key: K, val: AppForm[K]) {
     setForm((prev) => ({ ...prev, [key]: val }))
@@ -137,18 +139,27 @@ function AppDrawer({
     return Object.keys(errs).length === 0
   }
 
-  async function handleSubmit() {
-    if (!validate()) return
+  async function submit(formToSubmit: AppForm) {
     setSubmitting(true)
     try {
-      await onSubmit(form)
+      await onSubmit(formToSubmit)
     } finally {
       setSubmitting(false)
     }
   }
 
+  function handleSubmit() {
+    if (!validate()) return
+    if (isSwitchingMode) {
+      setPendingForm(form)
+      return
+    }
+    void submit(form)
+  }
+
   return (
-    <RightDrawer width={480} zIndex={50} overlayOpacity={0.2} onClose={onClose}>
+    <>
+      <RightDrawer width={480} zIndex={50} overlayOpacity={0.2} onClose={onClose}>
       <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-6 py-4">
         <span className="text-[15px] font-semibold text-[#111827]">{isEdit ? "编辑应用" : "新建应用"}</span>
         <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#9ca3af] transition-colors hover:bg-[#f3f4f6] hover:text-[#374151]">
@@ -208,6 +219,13 @@ function AppDrawer({
             error={errors.monetizationType}
             required
           />
+          {isSwitchingMode && (
+            <div className="rounded-[6px] bg-[#fff8e8] px-3 py-2.5 text-[12px] leading-relaxed text-[#8a5a00]">
+              切换后只开放新模式的权益获取入口；已有 Beans/广告永久解锁和未到期会员继续有效。
+              {form.monetizationType === "IAP" && " 未完成的广告会话将被取消。"}
+              {form.monetizationType === "IAA" && " 切换前已创建的支付订单仍可完成结算。"}
+            </div>
+          )}
           {form.monetizationType === "IAA" && (
             <FormInput
               label="广告位 ID"
@@ -223,12 +241,37 @@ function AppDrawer({
           className="flex h-[32px] items-center rounded-[6px] border border-[#d1d5db] bg-white px-4 text-[13px] text-[#374151] transition-colors hover:bg-[#f5f6f7]">
           取消
         </button>
-        <button onClick={handleSubmit} disabled={submitting}
-          className="flex h-[32px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a] disabled:opacity-60">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="flex h-[32px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a] disabled:opacity-60"
+        >
           {submitting ? "提交中..." : "确认"}
         </button>
       </div>
     </RightDrawer>
+    {pendingForm && app && (
+      <ConfirmDialog
+        title="确认切换变现模式"
+        message={
+          <div className="space-y-2">
+            <p>将从 {app.monetizationType} 切换到 {pendingForm.monetizationType}。</p>
+            <p>已有 Beans/广告永久解锁和未到期会员不会失效；切换后只能按新模式获取权益。</p>
+            {pendingForm.monetizationType === "IAP" && <p>未完成的广告会话将被取消。</p>}
+            {pendingForm.monetizationType === "IAA" && <p>切换前已创建的支付订单仍允许完成结算。</p>}
+          </div>
+        }
+        confirmLabel="确认切换"
+        onCancel={() => setPendingForm(null)}
+        onConfirm={async () => {
+          const nextForm = pendingForm
+          setPendingForm(null)
+          await submit(nextForm)
+        }}
+      />
+    )}
+    </>
   )
 }
 

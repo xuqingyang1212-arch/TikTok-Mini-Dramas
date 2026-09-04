@@ -148,10 +148,6 @@ func UpdateApp(c *gin.Context) {
 		response.FailBadRequest(c, "变现类型仅支持 IAA 或 IAP")
 		return
 	}
-	if err == service.ErrMonetizationTypeInUse {
-		response.FailBadRequest(c, "应用已有订单或解锁权益，不能切换变现类型")
-		return
-	}
 	if err != nil {
 		response.FailServer(c, "更新失败")
 		return

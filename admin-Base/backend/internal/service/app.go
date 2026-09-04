@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"scaffold-admin/internal/model"
+	"scaffold-admin/internal/pkg/datetime"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -56,7 +57,6 @@ var (
 	ErrAppClientKeyExists      = errors.New("client key already exists")
 	ErrAppAppIDExists          = errors.New("app id already exists")
 	ErrInvalidMonetizationType = errors.New("invalid monetization type")
-	ErrMonetizationTypeInUse   = errors.New("monetization type has business data")
 )
 
 // ─── Implementation ─────────────────────────────────────────────────────────
@@ -155,15 +155,8 @@ func (s *appService) Update(id int64, in UpdateAppInput) error {
 			return err
 		}
 		if app.MonetizationType != in.MonetizationType {
-			tables := []any{&model.PaymentOrder{}, &model.UserSubscription{}, &model.UserUnlock{}, &model.AdUnlockSession{}}
-			for _, table := range tables {
-				var count int64
-				if err := tx.Model(table).Where("app_id = ?", id).Count(&count).Error; err != nil {
-					return err
-				}
-				if count > 0 {
-					return ErrMonetizationTypeInUse
-				}
+			if err := prepareMonetizationSwitch(tx, app.ID, in.MonetizationType); err != nil {
+				return err
 			}
 		}
 
@@ -201,8 +194,23 @@ func (s *appService) Update(id int64, in UpdateAppInput) error {
 	})
 }
 
+func prepareMonetizationSwitch(tx *gorm.DB, appID int64, nextType string) error {
+	if nextType != monetizationTypeIAP {
+		return nil
+	}
+
+	now := datetime.NowUTC()
+	return tx.Model(&model.AdUnlockSession{}).
+		Where("app_id = ? AND status = ?", appID, "pending").
+		Updates(map[string]any{
+			"status":     "canceled",
+			"active_key": nil,
+			"updated_at": now,
+		}).Error
+}
+
 func isValidMonetizationType(value string) bool {
-	return value == "IAA" || value == "IAP"
+	return value == monetizationTypeIAA || value == monetizationTypeIAP
 }
 
 func normalizeAdPlacementID(monetizationType, adPlacementID string) string {

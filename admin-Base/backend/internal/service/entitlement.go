@@ -124,27 +124,30 @@ func (r *entitlementResolver) resolve(drama model.Drama, userID int64) (*entitle
 		}
 		return nil, err
 	}
-	if app.MonetizationType == monetizationTypeIAA {
-		result.CanUnlockAd = app.Status == appStatusEnabled && strings.TrimSpace(app.AdPlacementID) != ""
-		return result, nil
+	active := false
+	if app.Status == appStatusEnabled {
+		var subscriptionErr error
+		active, subscriptionErr = hasActiveSubscription(r.db, app.ID, userID)
+		if subscriptionErr != nil {
+			return nil, subscriptionErr
+		}
 	}
-	if app.MonetizationType != monetizationTypeIAP || app.Status != appStatusEnabled {
-		return result, nil
-	}
+	applyCurrentEntitlements(result, drama, app, active)
+	return result, nil
+}
 
-	active, err := hasActiveSubscription(r.db, app.ID, userID)
-	if err != nil {
-		return nil, err
-	}
-	result.Subscription = active
-	if active {
+func applyCurrentEntitlements(result *entitlementContext, drama model.Drama, app model.App, activeSubscription bool) {
+	result.Subscription = activeSubscription
+	if activeSubscription {
 		for episodeNo := drama.PaywallEpisode; episodeNo <= drama.EpisodeCount; episodeNo++ {
 			if result.UnlockTypes[episodeNo] == unlockTypeLocked {
 				result.UnlockTypes[episodeNo] = unlockTypeSubscription
 			}
 		}
 	}
-	return result, nil
+
+	result.CanUnlockAd = app.MonetizationType == monetizationTypeIAA &&
+		app.Status == appStatusEnabled && strings.TrimSpace(app.AdPlacementID) != ""
 }
 
 func (r *entitlementResolver) resolveEpisode(db *gorm.DB, appID, userID, dramaID int64, episodeNo, paywallEpisode int) (bool, string, error) {

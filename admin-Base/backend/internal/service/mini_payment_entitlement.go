@@ -8,7 +8,11 @@ import (
 // HasActiveSubscription 便捷方法：根据 userID 自动解析 appID
 func (s *miniPaymentService) HasActiveSubscription(userID int64) bool {
 	u, err := s.getAppUser(userID)
-	if err != nil || s.requireIAPApp(u.AppID) != nil {
+	if err != nil {
+		return false
+	}
+	var app model.App
+	if err := s.db.First(&app, u.AppID).Error; err != nil || app.Status != appStatusEnabled {
 		return false
 	}
 	return s.hasActiveSubscriptionForApp(u.AppID, userID)
@@ -17,7 +21,11 @@ func (s *miniPaymentService) HasActiveSubscription(userID int64) bool {
 // SubscriptionStatus 返回用户当前有效会员状态（取到期时间最晚的一条）
 func (s *miniPaymentService) SubscriptionStatus(userID int64) SubscriptionStatusOut {
 	u, err := s.getAppUser(userID)
-	if err != nil || s.requireIAPApp(u.AppID) != nil {
+	if err != nil {
+		return SubscriptionStatusOut{}
+	}
+	var app model.App
+	if err := s.db.First(&app, u.AppID).Error; err != nil || app.Status != appStatusEnabled {
 		return SubscriptionStatusOut{}
 	}
 	var sub model.UserSubscription

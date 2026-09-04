@@ -30,6 +30,10 @@ func periodDuration(period string, from time.Time) time.Time {
 	}
 }
 
+func canSettlePaymentOrder(order model.PaymentOrder) bool {
+	return order.PayStatus == "pending"
+}
+
 // SubmitPayResult 处理演示支付结果：success=true 则解锁/开通，false 则失败。幂等。
 func (s *miniPaymentService) SubmitPayResult(orderNo string, success bool) (*MiniPayResultOutput, error) {
 	var order model.PaymentOrder
@@ -39,7 +43,7 @@ func (s *miniPaymentService) SubmitPayResult(orderNo string, success bool) (*Min
 
 	// 幂等：已支付/已失败/已取消均为终态，直接返回当前状态。
 	// 支付失败(failed)是终态，不能再变为成功；用户如需重试须重新下单（点击档位创建新订单）。
-	if order.PayStatus == "paid" || order.PayStatus == "failed" || order.PayStatus == "cancelled" {
+	if !canSettlePaymentOrder(order) {
 		out := &MiniPayResultOutput{OrderNo: order.OrderNo, PayStatus: order.PayStatus}
 		if order.PayStatus == "paid" && order.OrderType == "unlock" {
 			out.Unlocked = decodeEpisodes(order.EpisodeList)
@@ -50,9 +54,6 @@ func (s *miniPaymentService) SubmitPayResult(orderNo string, success bool) (*Min
 	if !success {
 		var result *MiniPayResultOutput
 		err := s.db.Transaction(func(tx *gorm.DB) error {
-			if err := requireIAPApp(tx, order.AppID, true); err != nil {
-				return err
-			}
 			now := datetime.NowUTC()
 			res := tx.Model(&model.PaymentOrder{}).
 				Where("order_no = ? AND pay_status = ?", order.OrderNo, "pending").
@@ -80,9 +81,6 @@ func (s *miniPaymentService) SubmitPayResult(orderNo string, success bool) (*Min
 	// 支付成功：在事务内执行解锁/开通
 	var unlockedEps []int
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := requireIAPApp(tx, order.AppID, true); err != nil {
-			return err
-		}
 		now := datetime.NowUTC()
 		// 只有抢占成功（RowsAffected==1）的那次才继续执行解锁/开通，杜绝并发双花。
 		paidAt := now

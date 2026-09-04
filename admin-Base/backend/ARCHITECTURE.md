@@ -115,18 +115,20 @@ flowchart TD
     F -->|否| U{是否存在永久解锁}
     U -->|Beans| Beans[beans]
     U -->|广告| Ad[ad]
-    U -->|否| M{是否为启用的 IAP 应用}
-    M -->|是| S{订阅是否有效}
+    U -->|否| S{是否存在有效订阅}
     S -->|是| Sub[subscription]
-    S -->|否| Locked[locked]
-    M -->|否| Locked
+    S -->|否| M{当前应用变现模式}
+    M -->|IAA 且广告位有效| AdEntry[locked，可创建广告会话]
+    M -->|IAP 或不可用| Locked[locked]
 ```
 
 约束：
 
 - 永久权益唯一维度为 `(app_id, user_id, drama_id, episode_no)`。
-- IAA 与 IAP 是应用级互斥模式。
-- IAA 应用不通过历史订阅放行付费集。
+- IAA 与 IAP 的应用级互斥仅约束新权益获取入口；切换后不得同时创建广告会话和 IAP 订单。
+- 已有 Beans/广告永久解锁跨模式继续有效，未到期订阅也继续生效，到期后自然失效。
+- IAA → IAP 时，事务内取消未完成广告会话并清空 `active_key`；已完成会话及其永久权益不变。
+- IAP → IAA 后禁止创建新支付订单；由于演示支付模型无法区分“尚未支付”和“已支付但回调未到”的 `pending` 订单，切换前已创建订单保留并允许按订单快照完成结算，以避免吞掉真实付款；订单结算不依赖切换后的当前模式。
 - 锁定集不得返回真实 `videoUrl`。
 
 ### 4.2 IAA 广告会话
