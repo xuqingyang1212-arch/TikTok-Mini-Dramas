@@ -7,7 +7,6 @@ export { SelectFilter, type SelectOption, type SelectFilterProps } from "./selec
 export { MultiSelectFilter, type MultiSelectFilterProps } from "./multi-select-filter"
 export { DateRangePicker, type DateRangeValue, type DateRangePickerProps } from "./date-range-picker"
 export { StatusBadge, type StatusBadgeProps, type StatusStyleConfig } from "./status-badge"
-export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog"
 export { RightDrawer, type RightDrawerProps } from "./right-drawer"
 export { Popconfirm, type PopconfirmProps } from "./popconfirm"
 export { FixedHeaderTable, thClass, type FixedHeaderTableProps } from "./fixed-header-table"

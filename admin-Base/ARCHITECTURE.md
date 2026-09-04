@@ -153,7 +153,7 @@ api.ts → api-client.ts
 
 通用后台交互位于 [components/shared/](./components/shared)：
 
-- `confirm-dialog` / `popconfirm`：危险操作确认。
+- `popconfirm`：危险操作确认。
 - `right-drawer`：详情和编辑抽屉。
 - `fixed-header-table`：固定表头表格。
 - `filter-bar`、`filter-input`、`select-filter`：筛选区域。
@@ -186,7 +186,6 @@ api.ts → api-client.ts
 - IAA 展示广告位相关配置。
 - IAP 展示 Beans、付费卡点和订阅配置。
 - 当前模式只决定新权益入口；已有 Beans/广告永久解锁和未到期会员跨模式继续生效。
-- 编辑应用并切换模式时必须二次确认，明确展示历史权益保留和在途流程处理：IAA → IAP 会取消未完成广告会话，IAP → IAA 会保留切换前已创建支付订单的结算能力。
 - 前端显隐规则必须与服务端约束一致，但不能替代服务端校验。
 
 ## 8. TypeScript 与错误处理
