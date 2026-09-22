@@ -16,11 +16,15 @@ import { useI18n } from "@/lib/i18n/I18nProvider"
 import { PaywallPanel } from "./PaywallPanel"
 import { VideoPlayerEpisodeList } from "./video-player/VideoPlayerEpisodeList"
 import {
+  applySwipeResistance,
   buildGridSlots,
   computeEpisodeTabs,
   formatTime,
   getVisibleEpisodes,
   resolveEpisodeSelection,
+  resolveEpisodeSelectionChange,
+  resolveEpisodeTabIndex,
+  resolveSwipeDecision,
 } from "./video-player/helpers"
 import { RewardedAdOverlay } from "./video-player/RewardedAdOverlay"
 import { usePlaybackControls } from "./video-player/usePlaybackControls"
@@ -199,7 +203,7 @@ export function VideoPlayer({
 
   useEffect(() => {
     if (!episodeTabs.length) return
-    const nextTabIndex = Math.floor((currentEpisode - 1) / 30)
+    const nextTabIndex = resolveEpisodeTabIndex(currentEpisode)
     setActiveTab((previousTab) => (previousTab === nextTabIndex ? previousTab : nextTabIndex))
   }, [currentEpisode, episodeTabs])
 
@@ -342,10 +346,7 @@ export function VideoPlayer({
     
     if (Math.abs(deltaY) > 5) {
       isSwiping.current = true
-      // Keep a little resistance while making the video follow the finger.
-      const resistance = 0.72
-      const adjustedDelta = deltaY * resistance
-      setTranslateY(adjustedDelta)
+      setTranslateY(applySwipeResistance(deltaY))
     }
   }
 
@@ -359,17 +360,15 @@ export function VideoPlayer({
   const handleTouchEnd = () => {
     if (isDragging || isAnimating || showPaywall || isAdOpen) return
 
-    const threshold = Math.min(96, Math.max(64, containerHeight.current * 0.1))
-    const distance = swipeDistance.current
+    const decision = resolveSwipeDecision({
+      distance: swipeDistance.current,
+      containerHeight: containerHeight.current,
+      previousEpisodeNo: prevEpisode?.episodeNo,
+      nextEpisodeNo: nextEpisodeData?.episodeNo,
+    })
 
-    if (Math.abs(distance) >= threshold) {
-      if (distance > 0 && nextEpisodeData) {
-        animateToEpisode(nextEpisodeData.episodeNo)
-      } else if (distance < 0 && prevEpisode) {
-        animateToEpisode(prevEpisode.episodeNo)
-      } else {
-        animateBack()
-      }
+    if (decision.type === "episode") {
+      animateToEpisode(decision.episodeNo)
     } else {
       animateBack()
     }
@@ -411,8 +410,9 @@ export function VideoPlayer({
   // Select episode from list
   const selectEpisode = (ep: Episode) => {
     setShowEpisodeList(false)
-    if (ep.episodeNo !== currentEpisode) {
-      setCurrentEpisode(ep.episodeNo)
+    const nextEpisode = resolveEpisodeSelectionChange(currentEpisode, ep.episodeNo)
+    if (nextEpisode !== null) {
+      setCurrentEpisode(nextEpisode)
       setProgress(0)
     }
   }

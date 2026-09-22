@@ -77,6 +77,15 @@ func (s *miniPaymentService) CreateUnlockOrder(userID, dramaID int64, tierKey, d
 			return ErrDramaNotAvailable
 		}
 
+		var currentUser model.AppUser
+		if err := tx.First(&currentUser, userID).Error; err != nil {
+			return ErrAppUserNotFound
+		}
+		operations, err := resolvePromotionOperations(tx, currentUser, drama)
+		if err != nil {
+			return err
+		}
+
 		var activeSubscriptionCount int64
 		if err := tx.Model(&model.UserSubscription{}).
 			Where("app_id = ? AND user_id = ? AND status = ? AND expire_at > ?", u.AppID, userID, "active", datetime.NowUTC()).
@@ -88,7 +97,7 @@ func (s *miniPaymentService) CreateUnlockOrder(userID, dramaID int64, tierKey, d
 		}
 
 		unlocked := make(map[int]bool)
-		for i := 1; i < drama.PaywallEpisode && i <= drama.EpisodeCount; i++ {
+		for i := 1; i < operations.PaywallEpisode && i <= drama.EpisodeCount; i++ {
 			unlocked[i] = true
 		}
 		var permanentUnlocks []model.UserUnlock
@@ -130,31 +139,36 @@ func (s *miniPaymentService) CreateUnlockOrder(userID, dramaID int64, tierKey, d
 		if beansPerEp < 1 {
 			beansPerEp = 100
 		}
+		if operations.BeansPerEp != nil {
+			beansPerEp = *operations.BeansPerEp
+		}
 
 		order := model.PaymentOrder{
-			ID:          snowflake.NextID(),
-			OrderNo:     genOrderNo(),
-			AppID:       u.AppID,
-			UserID:      userID,
-			OrderType:   "unlock",
-			DramaID:     dramaID,
-			TierKey:     tierKey,
-			EpisodeList: encodeEpisodes(target),
-			UnlockCount: len(target),
-			BeansCost:   len(target) * beansPerEp,
-			DeviceOS:    normalizeDeviceOS(deviceOS),
-			PayStatus:   "pending",
+			ID:                snowflake.NextID(),
+			OrderNo:           genOrderNo(),
+			AppID:             u.AppID,
+			UserID:            userID,
+			AttributionLinkID: currentUser.CurrentPromotionLinkID,
+			OrderType:         "unlock",
+			DramaID:           dramaID,
+			TierKey:           tierKey,
+			EpisodeList:       encodeEpisodes(target),
+			UnlockCount:       len(target),
+			BeansCost:         len(target) * beansPerEp,
+			DeviceOS:          normalizeDeviceOS(deviceOS),
+			PayStatus:         "pending",
 		}
 		if err := tx.Create(&order).Error; err != nil {
 			return err
 		}
 
 		result = &MiniOrderResult{
-			OrderNo:   order.OrderNo,
-			OrderType: order.OrderType,
-			PayStatus: order.PayStatus,
-			BeansCost: order.BeansCost,
-			Episodes:  target,
+			OrderNo:           order.OrderNo,
+			OrderType:         order.OrderType,
+			PayStatus:         order.PayStatus,
+			AttributionLinkID: promotionLinkIDString(order.AttributionLinkID),
+			BeansCost:         order.BeansCost,
+			Episodes:          target,
 		}
 		return nil
 	})

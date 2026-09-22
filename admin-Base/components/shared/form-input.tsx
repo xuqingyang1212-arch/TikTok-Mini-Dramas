@@ -13,6 +13,7 @@ export interface FormInputProps {
   min?: number
   max?: number
   step?: number
+  disabled?: boolean
 }
 
 /**
@@ -30,6 +31,7 @@ export function FormInput({
   min,
   max,
   step,
+  disabled,
 }: FormInputProps) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -42,12 +44,14 @@ export function FormInput({
         min={min}
         max={max}
         step={step}
+        disabled={disabled}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           "h-[34px] w-full rounded-[6px] border px-3 text-[13px] outline-none transition-colors",
           "bg-white text-[#374151] placeholder-[#9ca3af] focus:border-[#38c08f]",
+          "disabled:cursor-not-allowed disabled:bg-[#f9fafb] disabled:text-[#9ca3af]",
           error ? "border-[#f04438]" : "border-[#d1d5db]"
         )}
       />

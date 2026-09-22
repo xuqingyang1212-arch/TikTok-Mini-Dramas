@@ -16,6 +16,7 @@ import (
 
 type DramaListFilter struct {
 	DramaID       string
+	Keyword       string
 	Name          string
 	Language      string
 	Status        string
@@ -77,7 +78,11 @@ func (s *dramaService) List(f DramaListFilter) ([]DramaListItem, int64, error) {
 	db := s.db.Model(&model.Drama{})
 
 	if f.DramaID != "" {
-		db = db.Where("CAST(id AS CHAR) LIKE ?", "%"+f.DramaID+"%")
+		db = db.Where("id = ?", f.DramaID)
+	}
+	if f.Keyword != "" {
+		pattern := "%" + f.Keyword + "%"
+		db = db.Where("CAST(id AS CHAR) LIKE ? OR name LIKE ?", pattern, pattern)
 	}
 	if f.Name != "" {
 		db = db.Where("name LIKE ?", "%"+f.Name+"%")

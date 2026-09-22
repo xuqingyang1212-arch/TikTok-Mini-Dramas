@@ -111,8 +111,12 @@ func (s *userService) GetByEmail(email string) (*model.User, error) {
 
 func (s *userService) Create(in CreateUserInput) (*model.User, error) {
 	var existing model.User
-	if err := s.db.Where("email = ?", in.Email).First(&existing).Error; err == nil {
+	err := s.db.Where("email = ?", in.Email).First(&existing).Error
+	if err == nil {
 		return nil, ErrEmailExists
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
@@ -153,7 +157,11 @@ func (s *userService) Update(id int64, in UpdateUserInput) (*model.User, error) 
 
 	txErr := s.db.Transaction(func(tx *gorm.DB) error {
 		if in.Status != "" {
-			if err := tx.Model(&u).Update("status", in.Status).Error; err != nil {
+			updates := map[string]interface{}{"status": in.Status}
+			if in.Status == consts.UserStatusDisabled {
+				updates["session_token"] = ""
+			}
+			if err := tx.Model(&u).Updates(updates).Error; err != nil {
 				return err
 			}
 		}

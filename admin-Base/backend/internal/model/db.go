@@ -1,7 +1,8 @@
 package model
 
 import (
-	"log"
+	"database/sql"
+	"fmt"
 	"time"
 
 	"scaffold-admin/internal/config"
@@ -11,52 +12,33 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var DB *gorm.DB
-
-func InitDB() {
-	cfg := config.Global.Database
-	var logLevel logger.LogLevel
-	if config.Global.Server.Mode == "debug" {
+func Open(cfg config.Config) (*gorm.DB, error) {
+	logLevel := logger.Warn
+	if cfg.Server.Mode == "debug" {
 		logLevel = logger.Info
-	} else {
-		logLevel = logger.Warn
 	}
-
-	var err error
-	DB, err = gorm.Open(mysql.Open(cfg.DSN()), &gorm.Config{
+	db, err := gorm.Open(mysql.Open(cfg.Database.DSN()), &gorm.Config{
 		Logger:                                   logger.Default.LogMode(logLevel),
 		DisableForeignKeyConstraintWhenMigrating: true,
 		NowFunc:                                  func() time.Time { return time.Now().UTC() },
 	})
 	if err != nil {
-		log.Fatalf("failed to connect database: %v", err)
+		return nil, fmt.Errorf("connect database: %w", err)
 	}
-
-	sqlDB, _ := DB.DB()
-	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-
-	// Session-level tuning only; global server variables should be tuned via my.cnf,
-	// not by the application (which requires SUPER and silently fails otherwise).
-	DB.Exec("SET SESSION sort_buffer_size = 8388608")
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get database pool: %w", err)
+	}
+	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	if err := db.Exec("SET SESSION sort_buffer_size = 8388608").Error; err != nil {
+		return nil, fmt.Errorf("configure database session: %w", err)
+	}
+	return db, nil
 }
 
-func AutoMigrate() {
-	// 旧数据可能没有 tier_id。必须在创建唯一索引前补齐，否则同一应用的
-	// 多条空 tier 会使 AutoMigrate 创建索引失败并阻止服务启动。
-	if DB.Migrator().HasTable(&SubscriptionPlan{}) && DB.Migrator().HasColumn(&SubscriptionPlan{}, "tier_id") {
-		if err := DB.Exec(`
-			UPDATE subscription_plans
-			SET tier_id = CONCAT('__legacy_tier_', id)
-			WHERE tier_id IS NULL OR TRIM(tier_id) = ''
-		`).Error; err != nil {
-			log.Fatalf("failed to backfill legacy subscription tier IDs: %v", err)
-		}
-	}
-
-	// 演示项目统一由 GORM 在启动时维护表结构，不再同时维护版本化 DDL。
-	// migrations/ 仅保留初始化账号等种子数据。
-	err := DB.AutoMigrate(
+func MigrateSchema(db *gorm.DB) error {
+	return db.AutoMigrate(
 		&User{},
 		&Role{},
 		&UserRole{},
@@ -72,33 +54,32 @@ func AutoMigrate() {
 		&UserSubscription{},
 		&PaymentOrder{},
 		&WatchLog{},
+		&PromotionLink{},
+		&PromotionAttributionHistory{},
+		&MediaEventReport{},
 	)
-	if err != nil {
-		log.Fatalf("failed to auto-migrate: %v", err)
-	}
-	if err := migrateLegacyTimesToUTC(); err != nil {
-		log.Fatalf("failed to migrate legacy timestamps to UTC: %v", err)
-	}
+}
 
-	// 迁移收尾：删除历史遗留的 open_id 单列唯一索引。
-	// 现在唯一性以 (app_id, open_id) 联合唯一为准（同一 openid 在不同小程序视为不同用户）。
-	// AutoMigrate 只新增联合唯一索引，不会移除旧的单列唯一索引，故在此显式清理（幂等）。
-	if DB.Migrator().HasIndex(&AppUser{}, "idx_app_users_open_id") {
-		if err := DB.Migrator().DropIndex(&AppUser{}, "idx_app_users_open_id"); err != nil {
-			log.Printf("warn: drop legacy index idx_app_users_open_id failed: %v", err)
-		}
-	}
+const firstPromotionLinkID int64 = 10000001
 
-	// 历史永久解锁均来自 Beans。AutoMigrate 新增字段后显式回填，避免旧库数据来源为空。
-	if err := DB.Model(&UserUnlock{}).
-		Where("unlock_type = '' OR unlock_type IS NULL").
-		Update("unlock_type", "beans").Error; err != nil {
-		log.Printf("warn: backfill user_unlocks.unlock_type failed: %v", err)
+func SetupCurrentData(db *gorm.DB) error {
+	var nextID sql.NullInt64
+	if err := db.Raw(`
+		SELECT AUTO_INCREMENT
+		FROM information_schema.TABLES
+		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'promotion_links'
+	`).Scan(&nextID).Error; err != nil {
+		return fmt.Errorf("read promotion link sequence: %w", err)
 	}
-	// 旧索引缺少 app_id；新索引创建成功后清理旧索引。
-	if DB.Migrator().HasIndex(&UserUnlock{}, "uk_unlock_aude") && DB.Migrator().HasIndex(&UserUnlock{}, "uk_unlock_ude") {
-		if err := DB.Migrator().DropIndex(&UserUnlock{}, "uk_unlock_ude"); err != nil {
-			log.Printf("warn: drop legacy index uk_unlock_ude failed: %v", err)
-		}
+	if !promotionLinkSequenceNeedsInitialization(nextID) {
+		return nil
 	}
+	if err := db.Exec(fmt.Sprintf("ALTER TABLE promotion_links AUTO_INCREMENT = %d", firstPromotionLinkID)).Error; err != nil {
+		return fmt.Errorf("initialize promotion link sequence: %w", err)
+	}
+	return nil
+}
+
+func promotionLinkSequenceNeedsInitialization(nextID sql.NullInt64) bool {
+	return !nextID.Valid || nextID.Int64 < firstPromotionLinkID
 }

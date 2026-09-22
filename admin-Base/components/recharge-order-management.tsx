@@ -1,15 +1,15 @@
 "use client"
 
 import { useState, useEffect, useCallback, type ReactNode } from "react"
-import { Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, type DateRangeValue, StatusBadge, type StatusStyleConfig, FixedHeaderTable, thClass, ColumnSettings } from "@/components/shared"
+import { FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, ExportButton, type DateRangeValue, StatusBadge, type StatusStyleConfig, FixedHeaderTable, thClass, ColumnSettings } from "@/components/shared"
 import { useColumnSettings, type ColumnDef } from "@/hooks/use-column-settings"
 import { rechargeOrderApi, type RechargeOrderItem } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
 import { useFilters } from "@/hooks/use-filters"
+import { usePerm } from "@/components/admin-layout"
 import { usePagination } from "@/hooks/use-pagination"
 import { useAppOptions } from "@/hooks/use-app-options"
 import { usePagedQuery } from "@/hooks/use-paged-query"
@@ -17,6 +17,7 @@ import { usePagedQuery } from "@/hooks/use-paged-query"
 interface FilterForm {
   appId: string
   userId: string
+  linkId: string
   orderNo: string
   thirdPartyOrderNo: string
   dramaId: string
@@ -29,6 +30,7 @@ interface FilterForm {
 const defaultFilters: FilterForm = {
   appId: "",
   userId: "",
+  linkId: "",
   orderNo: "",
   thirdPartyOrderNo: "",
   dramaId: "",
@@ -121,6 +123,10 @@ const ALL_COLUMNS: OrderColumn[] = [
     render: (r) => <span className="font-mono text-[#4b5563]">{r.userId}</span>,
   },
   {
+    key: "attributionLinkId", label: "Linkid",
+    render: (r) => r.attributionLinkId ? <span className="font-mono text-[#4b5563]">{r.attributionLinkId}</span> : mutedDash,
+  },
+  {
     key: "appName", label: "小程序",
     render: (r) => <span className="text-[#111827]">{r.appName}</span>,
   },
@@ -181,6 +187,7 @@ const ALL_COLUMNS: OrderColumn[] = [
 ]
 
 export default function RechargeOrderManagement() {
+  const canExport = usePerm("finance.recharge.export")
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
 
@@ -189,7 +196,7 @@ export default function RechargeOrderManagement() {
   const appOptions = rawAppOptions.map((app) => ({ label: app.name, value: String(app.id) }))
 
   // 自定义列展示：勾选结果持久化到 localStorage（按登录用户隔离）。
-  const colSettings = useColumnSettings("recharge-order", ALL_COLUMNS)
+  const colSettings = useColumnSettings("recharge-order-v2", ALL_COLUMNS)
   // 按用户自定义顺序 + 可见性取列（visibleKeys 已是用户排好的顺序），
   // 映射回带 render 的 OrderColumn。
   const columnByKey = new Map(ALL_COLUMNS.map((c) => [c.key, c]))
@@ -201,6 +208,7 @@ export default function RechargeOrderManagement() {
   const buildFilterParams = useCallback(() => ({
     appId: activeFilters.appId || undefined,
     userId: activeFilters.userId.trim() || undefined,
+    linkId: activeFilters.linkId.trim() || undefined,
     orderNo: activeFilters.orderNo.trim() || undefined,
     thirdPartyOrderNo: activeFilters.thirdPartyOrderNo.trim() || undefined,
     dramaId: activeFilters.dramaId.trim() || undefined,
@@ -249,13 +257,12 @@ export default function RechargeOrderManagement() {
         actions={
           <FilterActions onQuery={handleQuery} onReset={handleReset}>
             <ColumnSettings settings={colSettings} />
-            <button onClick={handleExport} disabled={exporting} className="flex h-[30px] items-center gap-1.5 rounded-[6px] border border-[#d1d5db] bg-white px-4 text-[13px] text-[#374151] transition-colors hover:bg-[#f5f6f7] disabled:cursor-not-allowed disabled:opacity-60">
-              <Download size={12} />{exporting ? "导出中..." : "导出"}
-            </button>
+            {canExport && <ExportButton exporting={exporting} onClick={() => void handleExport()} />}
           </FilterActions>
         }
       >
         <FilterInput block label="用户ID" placeholder="请输入" value={draftFilters.userId} onChange={(v) => updateDraft("userId", v)} />
+        <FilterInput block label="Linkid" placeholder="请输入 Linkid" value={draftFilters.linkId} onChange={(v) => updateDraft("linkId", v)} />
         <SelectFilter block label="小程序" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} options={appOptions} placeholder="全部" />
         <SelectFilter block label="订单类型" value={draftFilters.orderType} onChange={(v) => updateDraft("orderType", v)} options={orderTypeOptions} placeholder="全部" />
         <FilterInput block label="充值剧集" placeholder="请输入剧集ID或名称" value={draftFilters.dramaId} onChange={(v) => updateDraft("dramaId", v)} />

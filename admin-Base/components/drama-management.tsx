@@ -1,15 +1,17 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Plus, ImageIcon, X, Upload, Trash2, Play, RefreshCw, Film } from "lucide-react"
+import { ImageIcon, X, Upload, Trash2, Play, RefreshCw, Film } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, type DateRangeValue, StatusBadge, RightDrawer, Popconfirm, FixedHeaderTable, thClass, FormSelect } from "@/components/shared"
+import { ActionButton, FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, type DateRangeValue, StatusBadge, RightDrawer, Popconfirm, FixedHeaderTable, thClass, FormSelect } from "@/components/shared"
 import { dramaApi, uploadApi, episodeApi, type EpisodeItem } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { usePagedQuery } from "@/hooks/use-paged-query"
+import { useEpisodeOperations, type EpisodeUploadStatus } from "@/hooks/use-episode-operations"
 import { usePerm } from "@/components/admin-layout"
 
 // ─────────────── Types ───────────────
@@ -276,7 +278,7 @@ function DramaDrawer({
   return (
     <RightDrawer width={480} zIndex={50} overlayOpacity={0.2} onClose={onClose}>
       <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-6 py-4">
-        <span className="text-[15px] font-semibold text-[#111827]">{isEdit ? "编辑剧集" : "创建剧集"}</span>
+        <span className="text-[15px] font-semibold text-[#111827]">{isEdit ? "编辑剧集" : "新建剧集"}</span>
         <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#9ca3af] transition-colors hover:bg-[#f3f4f6] hover:text-[#374151]">
           <X size={16} />
         </button>
@@ -332,15 +334,6 @@ function DramaDrawer({
       </div>
     </RightDrawer>
   )
-}
-
-// ─────────────── Upload Progress Types ───────────────
-interface EpisodeUploadStatus {
-  episodeNo: number
-  fileName: string
-  percent: number // 0-100
-  status: "pending" | "uploading" | "done" | "failed"
-  error?: string
 }
 
 // ─────────────── DetailDrawer ───────────────
@@ -438,11 +431,7 @@ function DetailDrawer({
     <RightDrawer width={960} zIndex={50} overlayOpacity={0.2} onClose={onClose}>
       <div className="relative flex h-full flex-col">
         <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-6 py-4">
-        <div className="flex items-center gap-3">
-          <span className="text-[15px] font-semibold text-[#111827]">{drama.name}</span>
-          <span className="text-[13px] text-[#9ca3af]">共 {drama.episodeCount} 集</span>
-          <span className="text-[13px] text-[#f97316]">卡点：第{drama.paywallEpisode}集起付费</span>
-        </div>
+        <span className="text-[15px] font-semibold text-[#111827]">{drama.name}</span>
         <div className="flex items-center gap-3">
           <button
             onClick={handleBatchUploadClick}
@@ -617,14 +606,10 @@ export default function DramaManagement() {
   const canEdit = usePerm(["resource.drama.edit", "resource.drama.update"])
   const canPublish = usePerm(["resource.drama.edit", "resource.drama.update"])
   const canUpload = usePerm(["resource.drama.upload", "resource.drama.edit", "resource.drama.create"])
-  const canDeleteEpisode = usePerm(["resource.drama.delete", "resource.drama.remove", "resource.drama.edit"])
+  const canDeleteEpisode = usePerm(["resource.drama.edit", "resource.drama.update"])
 
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
-
-  const [data, setData] = useState<DramaItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
 
   // 固定表头：横向滚动同步（表头随内容一起横向平移，且帧级对齐）
 
@@ -640,34 +625,28 @@ export default function DramaManagement() {
   const [episodes, setEpisodes] = useState<EpisodeItem[]>([])
   const [loadingEpisodes, setLoadingEpisodes] = useState(false)
 
-  // Upload progress state - per episode
-  const [uploadingEpisodes, setUploadingEpisodes] = useState<EpisodeUploadStatus[]>([])
+  const fetchList = useCallback(({ page, pageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => (
+    dramaApi.list<DramaItem>({
+      page,
+      pageSize,
+      dramaId: filters?.dramaId.trim() || undefined,
+      name: filters?.name.trim() || undefined,
+      language: filters?.language || undefined,
+      status: filters?.status || undefined,
+      createdAtFrom: filters?.createdAtRange[0] || undefined,
+      createdAtTo: filters?.createdAtRange[1] || undefined,
+    })
+  ), [])
+  const { data, total, loading, error: listError, refresh: refreshList } = usePagedQuery<DramaItem, FilterForm>({
+    page: currentPage,
+    pageSize,
+    filters: activeFilters,
+    fetcher: fetchList,
+  })
 
-  const fetchList = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await dramaApi.list<DramaItem>({
-        page: currentPage,
-        pageSize,
-        dramaId: activeFilters.dramaId.trim() || undefined,
-        name: activeFilters.name.trim() || undefined,
-        language: activeFilters.language || undefined,
-        status: activeFilters.status || undefined,
-        createdAtFrom: activeFilters.createdAtRange[0] || undefined,
-        createdAtTo: activeFilters.createdAtRange[1] || undefined,
-      })
-      setData(res.list || [])
-      setTotal(res.total ?? 0)
-    } catch {
-      setData([])
-      setTotal(0)
-      toast.error("加载失败")
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage, pageSize, activeFilters])
-
-  useEffect(() => { void fetchList() }, [fetchList])
+  useEffect(() => {
+    if (listError) toast.error("加载失败")
+  }, [listError])
 
   function handleQuery() { applyFilters(); resetPage() }
   function handleReset() { resetFilters(); resetPage() }
@@ -688,7 +667,7 @@ export default function DramaManagement() {
     try {
       await dramaApi.toggleStatus(row.id)
       toast.success(row.status === "上架" ? "已下架" : "已上架")
-      fetchList()
+      await refreshList()
     } catch (err: any) {
       toast.error(err.message || "操作失败")
     }
@@ -735,181 +714,14 @@ export default function DramaManagement() {
     setEpisodes([])
   }
 
-  // Parse episode number from filename
-  function parseEpisodeNo(filename: string): number | null {
-    const patterns = [
-      /第(\d+)集/,
-      /[Ee]p?(\d+)/,
-      /[_\-\s](\d+)[_\-\s.]/,
-      /^(\d+)[_\-\s.]/,
-      /(\d+)\.(?:mp4|mov|webm|avi|mkv)$/i,
-    ]
-    for (const pattern of patterns) {
-      const match = filename.match(pattern)
-      if (match) return parseInt(match[1], 10)
-    }
-    return null
-  }
-
-  async function handleBatchUpload(files: FileList) {
-    if (!detailDrama) return
-    if (!canUpload) {
-      toast.error("暂无上传权限")
-      return
-    }
-
-    // Parse and sort files by episode number
-    const fileList = Array.from(files)
-    const parsed: { file: File; episodeNo: number }[] = []
-
-    for (const file of fileList) {
-      const no = parseEpisodeNo(file.name)
-      if (no === null) {
-        toast.error(`无法识别 "${file.name}" 的集数，请确保文件名包含数字`)
-        return
-      }
-      parsed.push({ file, episodeNo: no })
-    }
-
-    // Sort by episode number
-    parsed.sort((a, b) => a.episodeNo - b.episodeNo)
-
-    // Validate continuity
-    const currentMax = episodes.length > 0 ? Math.max(...episodes.map(e => e.episodeNo)) : 0
-    const expectedStart = currentMax + 1
-
-    for (let i = 0; i < parsed.length; i++) {
-      const expectedNo = expectedStart + i
-      if (parsed[i].episodeNo !== expectedNo) {
-        toast.error(`集数不连续：期望第 ${expectedNo} 集，但文件 "${parsed[i].file.name}" 是第 ${parsed[i].episodeNo} 集`)
-        return
-      }
-    }
-
-    // Initialize per-episode upload status
-    const initialStatus: EpisodeUploadStatus[] = parsed.map((item) => ({
-      episodeNo: item.episodeNo,
-      fileName: item.file.name,
-      percent: 0,
-      status: "pending",
-    }))
-    setUploadingEpisodes(initialStatus)
-
-    try {
-      for (let i = 0; i < parsed.length; i++) {
-        const item = parsed[i]
-        const UPLOAD_DURATION = 3000 // 3秒
-
-        // Mark current as uploading
-        setUploadingEpisodes((prev) =>
-          prev.map((ep, idx) => idx === i ? { ...ep, status: "uploading", percent: 0 } : ep)
-        )
-
-        // Start simulated progress animation (0% to 90% over 2.7s)
-        const startTime = Date.now()
-        let cancelled = false
-        const progressInterval = setInterval(() => {
-          if (cancelled) return
-          const elapsed = Date.now() - startTime
-          const progress = Math.min(90, Math.floor((elapsed / UPLOAD_DURATION) * 100))
-          setUploadingEpisodes((prev) =>
-            prev.map((ep, idx) => idx === i ? { ...ep, percent: progress } : ep)
-          )
-        }, 50)
-
-        let result: { url: string; size: number }
-        try {
-          // Start real upload
-          const uploadPromise = uploadApi.video(item.file)
-          
-          // Wait for both upload completion and minimum time
-          const [uploadResult] = await Promise.all([
-            uploadPromise,
-            new Promise<void>(resolve => setTimeout(resolve, UPLOAD_DURATION))
-          ])
-          result = uploadResult
-        } catch (err: any) {
-          cancelled = true
-          clearInterval(progressInterval)
-          // Mark as failed and stop
-          setUploadingEpisodes((prev) =>
-            prev.map((ep, idx) => idx === i ? { ...ep, status: "failed", error: err.message } : ep)
-          )
-          toast.error(`第${item.episodeNo}集上传失败：${err.message || "网络错误"}`)
-          // Don't continue uploading subsequent episodes
-          setTimeout(() => setUploadingEpisodes([]), 3000)
-          return
-        }
-
-        cancelled = true
-        clearInterval(progressInterval)
-
-        // Upload done, create episode on server
-        try {
-          await episodeApi.batchCreate(detailDrama.id, [{
-            episodeNo: item.episodeNo,
-            videoUrl: result.url,
-            fileSize: result.size,
-          }])
-        } catch (err: any) {
-          setUploadingEpisodes((prev) =>
-            prev.map((ep, idx) => idx === i ? { ...ep, status: "failed", error: err.message } : ep)
-          )
-          toast.error(`第${item.episodeNo}集创建失败：${err.message}`)
-          setTimeout(() => setUploadingEpisodes([]), 3000)
-          return
-        }
-
-        // Mark as done
-        setUploadingEpisodes((prev) =>
-          prev.map((ep, idx) => idx === i ? { ...ep, status: "done", percent: 100 } : ep)
-        )
-      }
-
-      toast.success(`成功上传 ${parsed.length} 集`)
-      fetchEpisodes(detailDrama.id)
-      fetchList()
-    } finally {
-      setTimeout(() => setUploadingEpisodes([]), 2000)
-    }
-  }
-
-  async function handleReupload(episodeId: string, file: File) {
-    if (!detailDrama) return
-    if (!canUpload) {
-      toast.error("暂无上传权限")
-      return
-    }
-
-    try {
-      toast.info("正在上传...")
-      const result = await uploadApi.video(file)
-      await episodeApi.update(detailDrama.id, episodeId, {
-        videoUrl: result.url,
-        fileSize: result.size,
-      })
-      toast.success("重新上传成功")
-      fetchEpisodes(detailDrama.id)
-    } catch (err: any) {
-      toast.error(err.message || "上传失败")
-    }
-  }
-
-  async function handleDeleteEpisode(episodeId: string) {
-    if (!detailDrama) return
-    if (!canDeleteEpisode) {
-      toast.error("暂无删除权限")
-      return
-    }
-    try {
-      await episodeApi.delete(detailDrama.id, episodeId)
-      toast.success("删除成功")
-      fetchEpisodes(detailDrama.id)
-      fetchList()
-    } catch (err: any) {
-      toast.error(err.message || "删除失败")
-    }
-  }
+  const { uploadingEpisodes, batchUpload: handleBatchUpload, reupload: handleReupload, deleteEpisode: handleDeleteEpisode } = useEpisodeOperations({
+    dramaId: detailDrama?.id,
+    episodes,
+    canUpload,
+    canDelete: canDeleteEpisode,
+    reloadEpisodes: fetchEpisodes,
+    reloadDramas: refreshList,
+  })
 
   function handleCloseDrawer() {
     setDrawerMode(null)
@@ -934,7 +746,7 @@ export default function DramaManagement() {
         toast.success("更新成功")
       }
       handleCloseDrawer()
-      fetchList()
+      await refreshList()
     } catch (err: any) {
       toast.error(err.message || "操作失败")
     }
@@ -982,7 +794,7 @@ export default function DramaManagement() {
             onClick={handleCreate}
             className="flex h-[30px] items-center gap-1.5 rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
           >
-            <Plus size={14} />创建剧集
+            新建剧集
           </button>
         </div>
       )}
@@ -1024,12 +836,9 @@ export default function DramaManagement() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       {canEdit && (
-                        <button
-                          onClick={() => handleEdit(row)}
-                          className="rounded border border-[#38c08f] px-2.5 py-1 text-[12px] text-[#38c08f] transition-colors hover:bg-[#f0fdf4]"
-                        >
+                        <ActionButton onClick={() => handleEdit(row)}>
                           编辑
-                        </button>
+                        </ActionButton>
                       )}
                       {canPublish && (row.status === "上架" ? (
                         <Popconfirm
@@ -1037,26 +846,18 @@ export default function DramaManagement() {
                           description="下架后小程序端将无法看到该剧集"
                           onConfirm={() => handleToggleStatus(row)}
                         >
-                          <button
-                            className="rounded border border-[#f87171] px-2.5 py-1 text-[12px] text-[#f87171] transition-colors hover:bg-[#fef2f2]"
-                          >
+                          <ActionButton variant="danger">
                             下架
-                          </button>
+                          </ActionButton>
                         </Popconfirm>
                       ) : (
-                        <button
-                          onClick={() => handleToggleStatus(row)}
-                          className="rounded border border-[#38c08f] px-2.5 py-1 text-[12px] text-[#38c08f] transition-colors hover:bg-[#f0fdf4]"
-                        >
+                        <ActionButton onClick={() => handleToggleStatus(row)}>
                           上架
-                        </button>
+                        </ActionButton>
                       ))}
-                      <button
-                        onClick={() => handleViewDetail(row)}
-                        className="rounded border border-[#6b7280] px-2.5 py-1 text-[12px] text-[#6b7280] transition-colors hover:bg-[#f9fafb]"
-                      >
+                      <ActionButton onClick={() => handleViewDetail(row)}>
                         查看详情
-                      </button>
+                      </ActionButton>
                     </div>
                   </td>
                 </tr>

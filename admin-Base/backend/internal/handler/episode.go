@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"strconv"
-
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/service"
 
@@ -11,13 +9,13 @@ import (
 
 // ─── List Episodes ──────────────────────────────────────────────────────────
 
-func ListEpisodes(c *gin.Context) {
+func (a *Application) ListEpisodes(c *gin.Context) {
 	dramaID, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	items, err := Svc.Episode.ListByDrama(dramaID)
+	items, err := a.services.Episode.ListByDrama(dramaID)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -38,7 +36,7 @@ type episodeUploadReq struct {
 	FileSize  int64  `json:"fileSize"`
 }
 
-func BatchCreateEpisodes(c *gin.Context) {
+func (a *Application) BatchCreateEpisodes(c *gin.Context) {
 	dramaID, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -65,7 +63,7 @@ func BatchCreateEpisodes(c *gin.Context) {
 		}
 	}
 
-	items, err := Svc.Episode.BatchCreate(service.BatchCreateEpisodeInput{
+	items, err := a.services.Episode.BatchCreate(service.BatchCreateEpisodeInput{
 		DramaID:  dramaID,
 		Episodes: uploads,
 	})
@@ -84,11 +82,13 @@ type updateEpisodeReq struct {
 	FileSize int64  `json:"fileSize"`
 }
 
-func UpdateEpisode(c *gin.Context) {
-	idStr := c.Param("episodeId")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || id <= 0 {
-		response.FailBadRequest(c, "无效的episodeId")
+func (a *Application) UpdateEpisode(c *gin.Context) {
+	dramaID, ok := ParseID(c, "id")
+	if !ok {
+		return
+	}
+	episodeID, ok := ParseID(c, "episodeId")
+	if !ok {
 		return
 	}
 
@@ -98,7 +98,7 @@ func UpdateEpisode(c *gin.Context) {
 		return
 	}
 
-	if err := Svc.Episode.Update(id, req.VideoURL, req.Duration, req.FileSize); err != nil {
+	if err := a.services.Episode.Update(dramaID, episodeID, req.VideoURL, req.Duration, req.FileSize); err != nil {
 		if err == service.ErrEpisodeNotFound {
 			response.FailNotFound(c, "单集不存在")
 			return
@@ -111,17 +111,23 @@ func UpdateEpisode(c *gin.Context) {
 
 // ─── Delete Episode ─────────────────────────────────────────────────────────
 
-func DeleteEpisode(c *gin.Context) {
-	idStr := c.Param("episodeId")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || id <= 0 {
-		response.FailBadRequest(c, "无效的episodeId")
+func (a *Application) DeleteEpisode(c *gin.Context) {
+	dramaID, ok := ParseID(c, "id")
+	if !ok {
+		return
+	}
+	episodeID, ok := ParseID(c, "episodeId")
+	if !ok {
 		return
 	}
 
-	if err := Svc.Episode.Delete(id); err != nil {
+	if err := a.services.Episode.Delete(dramaID, episodeID); err != nil {
 		if err == service.ErrEpisodeNotFound {
 			response.FailNotFound(c, "单集不存在")
+			return
+		}
+		if err == service.ErrEpisodeDramaMustBeOffline {
+			response.FailBadRequest(c, "请先下架剧集后再删除单集")
 			return
 		}
 		if err == service.ErrEpisodeNotLast {

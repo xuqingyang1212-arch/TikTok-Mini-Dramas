@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func MiniCreateAdUnlockSession(c *gin.Context) {
+func (a *Application) MiniCreateAdUnlockSession(c *gin.Context) {
 	var req struct {
 		UserID    string `json:"userId" binding:"required"`
 		DramaID   string `json:"dramaId" binding:"required"`
@@ -31,7 +31,7 @@ func MiniCreateAdUnlockSession(c *gin.Context) {
 		return
 	}
 
-	result, err := Svc.AdUnlock.Create(userID, dramaID, req.EpisodeNo)
+	result, err := a.services.AdUnlock.Create(userID, dramaID, req.EpisodeNo)
 	if err != nil {
 		writeAdUnlockError(c, err)
 		return
@@ -39,7 +39,7 @@ func MiniCreateAdUnlockSession(c *gin.Context) {
 	response.OK(c, result)
 }
 
-func MiniCompleteAdUnlockSession(c *gin.Context) {
+func (a *Application) MiniCompleteAdUnlockSession(c *gin.Context) {
 	sessionNo := c.Param("sessionNo")
 	var req struct {
 		UserID string `json:"userId" binding:"required"`
@@ -53,7 +53,7 @@ func MiniCompleteAdUnlockSession(c *gin.Context) {
 		response.FailBadRequest(c, "无效的用户ID")
 		return
 	}
-	result, err := Svc.AdUnlock.Complete(sessionNo, userID)
+	result, err := a.services.AdUnlock.Complete(sessionNo, userID)
 	if err != nil {
 		writeAdUnlockError(c, err)
 		return
@@ -61,7 +61,7 @@ func MiniCompleteAdUnlockSession(c *gin.Context) {
 	response.OK(c, result)
 }
 
-func MiniCancelAdUnlockSession(c *gin.Context) {
+func (a *Application) MiniCancelAdUnlockSession(c *gin.Context) {
 	sessionNo := c.Param("sessionNo")
 	var req struct {
 		UserID string `json:"userId" binding:"required"`
@@ -75,7 +75,7 @@ func MiniCancelAdUnlockSession(c *gin.Context) {
 		response.FailBadRequest(c, "无效的用户ID")
 		return
 	}
-	result, err := Svc.AdUnlock.Cancel(sessionNo, userID)
+	result, err := a.services.AdUnlock.Cancel(sessionNo, userID)
 	if err != nil {
 		writeAdUnlockError(c, err)
 		return

@@ -1,13 +1,15 @@
 package middleware
 
 import (
+	"scaffold-admin/internal/consts"
 	"scaffold-admin/internal/model"
 	"scaffold-admin/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func SessionGuard() gin.HandlerFunc {
+func SessionGuard(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, _ := c.Get("userID")
 		sessToken, _ := c.Get("sessionToken")
@@ -22,8 +24,14 @@ func SessionGuard() gin.HandlerFunc {
 		}
 
 		var user model.User
-		if err := model.DB.Select("id, session_token").First(&user, uid).Error; err != nil {
+		if err := db.Select("id, status, session_token").First(&user, uid).Error; err != nil {
 			response.FailUnauthorized(c, "用户不存在")
+			c.Abort()
+			return
+		}
+
+		if user.Status != consts.UserStatusActive {
+			response.FailUnauthorized(c, "账号已禁用")
 			c.Abort()
 			return
 		}

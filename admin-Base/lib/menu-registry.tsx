@@ -13,7 +13,7 @@
 
 import type { ComponentType } from "react"
 import type { LucideIcon } from "lucide-react"
-import { Film, Wallet, Wrench, Users, Settings } from "lucide-react"
+import { Film, Megaphone, Wallet, Wrench, Users, Settings } from "lucide-react"
 import dynamic from "next/dynamic"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -97,11 +97,34 @@ export const menuRegistry: RegistryBranch[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 金融管理
+  // 推广管理
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    key: "campaign",
+    label: "推广管理",
+    icon: Megaphone,
+    children: [
+      {
+        key: "campaignLink",
+        label: "推广链接",
+        permission: "campaign.link.list",
+        component: lazyPage(() => import("@/components/campaign-link-management")),
+      },
+      {
+        key: "mediaEvent",
+        label: "媒体事件",
+        permission: "campaign.media-event.list",
+        component: lazyPage(() => import("@/components/media-event-management")),
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 订单管理
   // ═══════════════════════════════════════════════════════════════════════════
   {
     key: "finance",
-    label: "金融管理",
+    label: "订单管理",
     icon: Wallet,
     children: [
       {
@@ -109,6 +132,12 @@ export const menuRegistry: RegistryBranch[] = [
         label: "充值订单",
         permission: "finance.recharge.list",
         component: lazyPage(() => import("@/components/recharge-order-management")),
+      },
+      {
+        key: "adSession",
+        label: "广告会话",
+        permission: "finance.ad-session.list",
+        component: lazyPage(() => import("@/components/ad-session-management")),
       },
     ],
   },

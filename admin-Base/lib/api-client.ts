@@ -46,15 +46,48 @@ function getAuthHeader(): string | undefined {
 }
 
 async function readErrorMessage(res: Response): Promise<string> {
+  return parseErrorMessage(await res.text(), res.status)
+}
+
+function parseErrorMessage(text: string, status: number, fallback = "请求失败"): string {
+  if (!text) return `${fallback} (${status})`
   try {
-    const text = await res.text()
-    if (!text) return `服务器错误 (${res.status})`
     const json = JSON.parse(text) as Partial<ApiResponse>
     if (typeof json.message === "string" && json.message.trim()) return json.message
     if (typeof json.error === "string" && json.error.trim()) return json.error
-    return `请求失败 (${res.status})`
-  } catch {
-    return `请求失败 (${res.status})`
+  } catch {}
+  return `${fallback} (${status})`
+}
+
+function handleInvalidSession(status: number, text = ""): string | null {
+  if (status !== 401 && status !== 409) return null
+  let message = status === 409 ? "您的账号已在其他设备登录，当前会话已失效" : "未登录或登录已过期"
+  if (text) {
+    try {
+      const body = JSON.parse(text) as Partial<ApiResponse>
+      if (body.message) message = body.message
+    } catch {}
+  }
+  clearToken()
+  if (typeof window !== "undefined") {
+    if (status === 409) alert(message)
+    window.location.href = "/login"
+  }
+  return message
+}
+
+function composeSignal(callerSignal?: AbortSignal, timeoutMs = 30000) {
+  const controller = new AbortController()
+  const abortFromCaller = () => controller.abort(callerSignal?.reason)
+  if (callerSignal?.aborted) abortFromCaller()
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true })
+  const timeout = setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), timeoutMs)
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeout)
+      callerSignal?.removeEventListener("abort", abortFromCaller)
+    },
   }
 }
 
@@ -99,49 +132,28 @@ async function request<T = unknown>(
     headers["Authorization"] = authHeader
   }
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30000)
+  const { signal, cleanup } = composeSignal(options.signal ?? undefined)
 
   let res: Response
   try {
     res = await fetch(`${getApiBase()}${path}`, {
       ...options,
       headers,
-      signal: controller.signal,
+      signal,
     })
   } catch (err) {
-    clearTimeout(timeout)
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("请求超时，请稍后重试")
-    }
+    if (options.signal?.aborted) throw err
+    if (signal.aborted) throw new Error("请求超时，请稍后重试")
     _offlineUntil = Date.now() + 3000
     throw new Error("backend offline")
   } finally {
-    clearTimeout(timeout)
+    cleanup()
   }
   _offlineUntil = 0
 
-  if (res.status === 401) {
-    clearToken()
-    if (typeof window !== "undefined") {
-      window.location.href = "/login"
-    }
-    throw new Error("未登录或登录已过期")
-  }
-
-  if (res.status === 409) {
-    const body = await res.text()
-    let msg = "您的账号已在其他设备登录，当前会话已失效"
-    try {
-      const j = JSON.parse(body) as { message?: string }
-      if (j.message) msg = j.message
-    } catch {}
-    clearToken()
-    if (typeof window !== "undefined") {
-      alert(msg)
-      window.location.href = "/login"
-    }
-    throw new Error(msg)
+  if (res.status === 401 || res.status === 409) {
+    const message = handleInvalidSession(res.status, await res.text())
+    throw new Error(message || "请求失败")
   }
 
   if (!res.ok) {
@@ -183,6 +195,50 @@ export function get<T = unknown>(
   return request<T>(path + query)
 }
 
+export async function downloadFile(
+  path: string,
+  params?: Record<string, unknown>,
+  fallbackFilename = "export.xlsx",
+  signal?: AbortSignal
+): Promise<void> {
+  const query = new URLSearchParams()
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") query.append(key, String(value))
+  })
+  const authHeader = getAuthHeader()
+  const composed = composeSignal(signal)
+  try {
+    const response = await fetch(`${getApiBase()}${path}${query.size ? `?${query.toString()}` : ""}`, {
+      headers: authHeader ? { Authorization: authHeader } : {},
+      signal: composed.signal,
+    })
+    if (response.status === 401 || response.status === 409) {
+      throw new Error(handleInvalidSession(response.status, await response.text()) || "请求失败")
+    }
+    if (!response.ok) throw new Error(await readErrorMessage(response))
+
+    const blob = await response.blob()
+    const disposition = response.headers.get("Content-Disposition") || ""
+    const filenameMatch = disposition.match(/filename=([^;]+)/)
+    const filename = filenameMatch ? decodeURIComponent(filenameMatch[1].trim().replace(/^"|"$/g, "")) : fallbackFilename
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = objectUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(objectUrl)
+  } catch (error) {
+    if (signal?.aborted) throw error
+    if (composed.signal.aborted) throw new Error("请求超时，请稍后重试")
+    if (error instanceof TypeError) throw new Error("backend offline")
+    throw error
+  } finally {
+    composed.cleanup()
+  }
+}
+
 export function post<T = unknown>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: "POST", body: JSON.stringify(body) })
 }
@@ -195,7 +251,8 @@ export function put<T = unknown>(path: string, body?: unknown): Promise<T> {
 export async function uploadFile<T = unknown>(
   path: string,
   file: File,
-  fieldName = "file"
+  fieldName = "file",
+  callerSignal?: AbortSignal,
 ): Promise<T> {
   const form = new FormData()
   form.append(fieldName, file)
@@ -204,16 +261,25 @@ export async function uploadFile<T = unknown>(
   const authHeader = getAuthHeader()
   if (authHeader) headers["Authorization"] = authHeader
 
-  const res = await fetch(`${getApiBase()}${path}`, {
-    method: "POST",
-    headers,
-    body: form,
-  })
+  const { signal, cleanup } = composeSignal(callerSignal)
+  let res: Response
+  try {
+    res = await fetch(`${getApiBase()}${path}`, {
+      method: "POST",
+      headers,
+      body: form,
+      signal,
+    })
+  } catch (err) {
+    if (callerSignal?.aborted) throw err
+    if (signal.aborted) throw new Error("请求超时，请稍后重试")
+    throw err
+  } finally {
+    cleanup()
+  }
 
-  if (res.status === 401) {
-    clearToken()
-    if (typeof window !== "undefined") window.location.href = "/login"
-    throw new Error("未登录或登录已过期")
+  if (res.status === 401 || res.status === 409) {
+    throw new Error(handleInvalidSession(res.status, await res.text()) || "上传失败")
   }
 
   if (!res.ok) {
@@ -253,6 +319,11 @@ export function uploadFileWithProgress<T = unknown>(
       }
     }
     xhr.onload = () => {
+      const sessionMessage = handleInvalidSession(xhr.status, xhr.responseText)
+      if (sessionMessage) return reject(new Error(sessionMessage))
+      if (xhr.status < 200 || xhr.status >= 300) {
+        return reject(new Error(parseErrorMessage(xhr.responseText, xhr.status, "上传失败")))
+      }
       try {
         const json = JSON.parse(xhr.responseText) as ApiResponse<T>
         if (json.code !== 0) return reject(new Error(json.message || "上传失败"))

@@ -73,9 +73,10 @@ func requireIAAApp(app model.App) error {
 }
 
 type entitlementContext struct {
-	UnlockTypes  map[int]string
-	Subscription bool
-	CanUnlockAd  bool
+	UnlockTypes    map[int]string
+	PaywallEpisode int
+	Subscription   bool
+	CanUnlockAd    bool
 }
 
 type entitlementResolver struct {
@@ -84,10 +85,26 @@ type entitlementResolver struct {
 
 func (r *entitlementResolver) resolve(drama model.Drama, userID int64) (*entitlementContext, error) {
 	result := &entitlementContext{
-		UnlockTypes: make(map[int]string, drama.EpisodeCount),
+		PaywallEpisode: drama.PaywallEpisode,
+		UnlockTypes:    make(map[int]string, drama.EpisodeCount),
+	}
+	var user model.AppUser
+	if userID > 0 {
+		if err := r.db.First(&user, userID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, err
+			}
+			userID = 0
+		} else {
+			operations, err := resolvePromotionOperations(r.db, user, drama)
+			if err != nil {
+				return nil, err
+			}
+			result.PaywallEpisode = operations.PaywallEpisode
+		}
 	}
 	for episodeNo := 1; episodeNo <= drama.EpisodeCount; episodeNo++ {
-		if episodeNo < drama.PaywallEpisode {
+		if episodeNo < result.PaywallEpisode {
 			result.UnlockTypes[episodeNo] = unlockTypeFree
 		} else {
 			result.UnlockTypes[episodeNo] = unlockTypeLocked
@@ -97,21 +114,13 @@ func (r *entitlementResolver) resolve(drama model.Drama, userID int64) (*entitle
 		return result, nil
 	}
 
-	var user model.AppUser
-	if err := r.db.First(&user, userID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return result, nil
-		}
-		return nil, err
-	}
-
 	var unlocks []model.UserUnlock
 	if err := r.db.Where("app_id = ? AND user_id = ? AND drama_id = ?", user.AppID, userID, drama.ID).
 		Find(&unlocks).Error; err != nil {
 		return nil, err
 	}
 	for _, unlock := range unlocks {
-		if unlock.EpisodeNo < drama.PaywallEpisode || unlock.EpisodeNo > drama.EpisodeCount {
+		if unlock.EpisodeNo < result.PaywallEpisode || unlock.EpisodeNo > drama.EpisodeCount {
 			continue
 		}
 		result.UnlockTypes[unlock.EpisodeNo] = normalizedUnlockType(unlock.UnlockType)
@@ -137,9 +146,13 @@ func (r *entitlementResolver) resolve(drama model.Drama, userID int64) (*entitle
 }
 
 func applyCurrentEntitlements(result *entitlementContext, drama model.Drama, app model.App, activeSubscription bool) {
+	paywallEpisode := result.PaywallEpisode
+	if paywallEpisode < 1 {
+		paywallEpisode = drama.PaywallEpisode
+	}
 	result.Subscription = activeSubscription
 	if activeSubscription {
-		for episodeNo := drama.PaywallEpisode; episodeNo <= drama.EpisodeCount; episodeNo++ {
+		for episodeNo := paywallEpisode; episodeNo <= drama.EpisodeCount; episodeNo++ {
 			if result.UnlockTypes[episodeNo] == unlockTypeLocked {
 				result.UnlockTypes[episodeNo] = unlockTypeSubscription
 			}

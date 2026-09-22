@@ -4,13 +4,14 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { ChevronDown, X, Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, FilterBar, FilterActions, StatusBadge, RightDrawer, FixedHeaderTable, thClass } from "@/components/shared"
+import { ActionButton, FilterInput, SelectFilter, FilterBar, FilterActions, StatusBadge, RightDrawer, FixedHeaderTable, thClass } from "@/components/shared"
 import { userApi, roleApi } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
 import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { usePagedQuery } from "@/hooks/use-paged-query"
 
 // ─────────────── Types ───────────────
 type UserStatus = "启用" | "禁用"
@@ -292,7 +293,7 @@ function UserDrawer({
   return (
     <RightDrawer width={480} zIndex={50} overlayOpacity={0.2} onClose={onClose}>
       <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-6 py-4">
-        <span className="text-[15px] font-semibold text-[#111827]">{isEdit ? "编辑用户" : "新增用户"}</span>
+        <span className="text-[15px] font-semibold text-[#111827]">{isEdit ? "编辑用户" : "新建用户"}</span>
         <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#9ca3af] transition-colors hover:bg-[#f3f4f6] hover:text-[#374151]">
           <X size={16} />
         </button>
@@ -341,9 +342,6 @@ function UserDrawer({
 
 // ─────────────── Main Component ───────────────
 export default function UserManagement() {
-  const [data, setData] = useState<User[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
   const [roleIdByName, setRoleIdByName] = useState<Map<string, number>>(new Map())
   const [roleOptions, setRoleOptions] = useState<{ label: string; value: string }[]>(roleOptionsFallback)
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
@@ -351,6 +349,7 @@ export default function UserManagement() {
   const [drawerMode, setDrawerMode] = useState<"add" | "edit" | null>(null)
   const [editingUser, setEditingUser] = useState<User | null>(null)
 
+  const canAdd = usePerm("system.user.add")
   const canEdit = usePerm("system.user.edit")
 
   useEffect(() => {
@@ -377,29 +376,26 @@ export default function UserManagement() {
     return () => { cancelled = true }
   }, [])
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await userApi.list({
-        page: currentPage,
-        pageSize,
-        name: activeFilters.name.trim() || undefined,
-        email: activeFilters.email.trim() || undefined,
-        role: activeFilters.role || undefined,
-        status: activeFilters.status || undefined,
-      })
-      const list = (res.list ?? []).map((row) => mapApiUser(row as Record<string, unknown>))
-      setTotal(res.total ?? 0)
-      setData(list)
-    } catch {
-      setData([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
+  const fetchUsers = useCallback(async ({ page, pageSize: queryPageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => {
+    const res = await userApi.list({
+      page,
+      pageSize: queryPageSize,
+      name: filters?.name.trim() || undefined,
+      email: filters?.email.trim() || undefined,
+      role: filters?.role || undefined,
+      status: filters?.status || undefined,
+    })
+    return {
+      list: (res.list ?? []).map((row) => mapApiUser(row as Record<string, unknown>)),
+      total: res.total ?? 0,
     }
-  }, [activeFilters, currentPage, pageSize])
-
-  useEffect(() => { void fetchUsers() }, [fetchUsers])
+  }, [])
+  const { data, total, loading, refresh: refreshUsers } = usePagedQuery<User, FilterForm>({
+    page: currentPage,
+    pageSize,
+    filters: activeFilters,
+    fetcher: fetchUsers,
+  })
 
   function handleQuery() { applyFilters(); resetPage() }
   function handleReset() { resetFilters(); resetPage() }
@@ -421,7 +417,7 @@ export default function UserManagement() {
       toast.success("用户创建成功")
       closeDrawer()
       resetPage()
-      await fetchUsers()
+      await refreshUsers()
     } catch (e) {
       toast.errorFrom(e, "创建失败")
       throw e
@@ -440,7 +436,7 @@ export default function UserManagement() {
       })
       toast.success("用户更新成功")
       closeDrawer()
-      await fetchUsers()
+      await refreshUsers()
     } catch (e) {
       toast.errorFrom(e, "更新失败")
       throw e
@@ -472,10 +468,22 @@ export default function UserManagement() {
         <SelectFilter block label="状态" value={draftFilters.status} onChange={(v) => updateDraft("status", v)} options={statusOptions} />
       </FilterBar>
 
+      {canAdd && (
+        <div className="flex shrink-0 items-center px-5 py-3">
+          <button
+            onClick={() => { setEditingUser(null); setDrawerMode("add") }}
+            className="flex h-[30px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
+          >
+            新建用户
+          </button>
+        </div>
+      )}
+
       {/* 表格区：统一固定表头组件 */}
       <FixedHeaderTable
-        minWidth={720}
-        columns={["w-[140px]", "w-[220px]", "", "w-[180px]", "w-[90px]", "w-[90px]"]}
+        autoWidth
+        minWidth={900}
+        columns={new Array(6).fill("")}
         loading={loading && pageData.length === 0}
         empty={pageData.length === 0}
         header={["用户名", "邮箱", "角色", "注册时间", "状态", "操作"].map((label) => (
@@ -507,10 +515,9 @@ export default function UserManagement() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {canEdit && (
-                        <button onClick={() => openEdit(row)}
-                          className="flex h-[26px] items-center rounded-[4px] border border-[#38c08f] bg-white px-2.5 text-[12px] text-[#38c08f] transition-colors hover:bg-[#edfaf4]">
+                        <ActionButton onClick={() => openEdit(row)}>
                           编辑
-                        </button>
+                        </ActionButton>
                       )}
                     </td>
                   </tr>

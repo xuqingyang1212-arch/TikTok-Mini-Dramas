@@ -11,9 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ListRoles(c *gin.Context) {
+func (a *Application) ListRoles(c *gin.Context) {
 	p := pagination.Parse(c)
-	roles, total, err := Svc.Role.List(service.RoleListFilter{
+	roles, total, err := a.services.Role.List(service.RoleListFilter{
 		Name:     TrimQuery(c, "name"),
 		Page:     p.Page,
 		PageSize: p.PageSize,
@@ -31,12 +31,12 @@ type RoleReq struct {
 	Permissions []string `json:"permissions"`
 }
 
-func CreateRole(c *gin.Context) {
+func (a *Application) CreateRole(c *gin.Context) {
 	var req RoleReq
 	if !BindOrFail(c, &req) {
 		return
 	}
-	role, err := Svc.Role.Create(service.CreateRoleInput{
+	role, err := a.services.Role.Create(service.CreateRoleInput{
 		Name:        req.Name,
 		Remark:      req.Remark,
 		Permissions: req.Permissions,
@@ -53,7 +53,7 @@ func CreateRole(c *gin.Context) {
 	response.OK(c, role)
 }
 
-func UpdateRole(c *gin.Context) {
+func (a *Application) UpdateRole(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -62,7 +62,7 @@ func UpdateRole(c *gin.Context) {
 	if !BindOrFail(c, &req) {
 		return
 	}
-	if err := Svc.Role.Update(id, service.UpdateRoleInput{
+	if err := a.services.Role.Update(id, service.UpdateRoleInput{
 		Name:        req.Name,
 		Remark:      req.Remark,
 		Permissions: req.Permissions,

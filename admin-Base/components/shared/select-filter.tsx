@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, type ReactNode } from "react"
 import { ChevronDown, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface SelectOption {
   label: string
   value: string
+  extra?: ReactNode
 }
 
 export interface SelectFilterProps {
@@ -57,7 +58,7 @@ export function SelectFilter({
           widthClass
         )}
       >
-        <span className="flex-1 truncate text-left">{selected ? selected.label : placeholder}</span>
+        <span className="flex flex-1 items-center gap-1.5 truncate text-left">{selected ? selected.label : placeholder}{selected?.extra}</span>
         {value ? (
           <X
             size={11}
@@ -79,7 +80,7 @@ export function SelectFilter({
                 value === opt.value ? "text-[#38c08f] font-medium" : "text-[#374151]"
               )}
             >
-              {opt.label}
+              <span className="flex items-center gap-1.5">{opt.label}{opt.extra}</span>
             </button>
           ))}
         </div>

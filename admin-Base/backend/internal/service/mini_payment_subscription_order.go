@@ -51,30 +51,37 @@ func (s *miniPaymentService) CreateSubscriptionOrder(userID, planID, dramaID int
 			return err
 		}
 
+		var currentUser model.AppUser
+		if err := tx.First(&currentUser, userID).Error; err != nil {
+			return ErrAppUserNotFound
+		}
+
 		order := model.PaymentOrder{
-			ID:           snowflake.NextID(),
-			OrderNo:      genOrderNo(),
-			AppID:        u.AppID,
-			UserID:       userID,
-			OrderType:    "subscription",
-			DramaID:      dramaID,
-			PlanID:       plan.ID,
-			Period:       plan.Period,
-			Amount:       amount,
-			Currency:     "USD",
-			PlanTierID:   plan.TierID,
-			PlanSnapshot: string(planSnapshot),
-			DeviceOS:     normalizedOS,
-			PayStatus:    "pending",
+			ID:                snowflake.NextID(),
+			OrderNo:           genOrderNo(),
+			AppID:             u.AppID,
+			UserID:            userID,
+			AttributionLinkID: currentUser.CurrentPromotionLinkID,
+			OrderType:         "subscription",
+			DramaID:           dramaID,
+			PlanID:            plan.ID,
+			Period:            plan.Period,
+			Amount:            amount,
+			Currency:          "USD",
+			PlanTierID:        plan.TierID,
+			PlanSnapshot:      string(planSnapshot),
+			DeviceOS:          normalizedOS,
+			PayStatus:         "pending",
 		}
 		if err := tx.Create(&order).Error; err != nil {
 			return err
 		}
 
 		result = &MiniOrderResult{
-			OrderNo:   order.OrderNo,
-			OrderType: order.OrderType,
-			PayStatus: order.PayStatus,
+			OrderNo:           order.OrderNo,
+			OrderType:         order.OrderType,
+			PayStatus:         order.PayStatus,
+			AttributionLinkID: promotionLinkIDString(order.AttributionLinkID),
 		}
 		return nil
 	})

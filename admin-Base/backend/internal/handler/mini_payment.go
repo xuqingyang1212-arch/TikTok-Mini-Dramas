@@ -14,7 +14,7 @@ import (
 
 // MiniGetPaywall 获取剧集付费面板数据
 // GET /api/mini/dramas/:id/paywall?userId=xxx&appId=xxx
-func MiniGetPaywall(c *gin.Context) {
+func (a *Application) MiniGetPaywall(c *gin.Context) {
 	dramaID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.FailBadRequest(c, "无效的剧集ID")
@@ -27,7 +27,7 @@ func MiniGetPaywall(c *gin.Context) {
 		currentEpisode = 1
 	}
 
-	result, err := Svc.MiniPayment.GetPaywall(dramaID, userID, appID, currentEpisode)
+	result, err := a.services.MiniPayment.GetPaywall(dramaID, userID, appID, currentEpisode)
 	if err != nil {
 		if errors.Is(err, service.ErrDramaNotAvailable) {
 			response.FailNotFound(c, "剧集不存在或已下架")
@@ -53,7 +53,7 @@ func MiniGetPaywall(c *gin.Context) {
 
 // MiniCreateUnlockOrder 创建 Beans 解锁订单
 // POST /api/mini/orders/unlock  body: { userId, dramaId, tierKey }
-func MiniCreateUnlockOrder(c *gin.Context) {
+func (a *Application) MiniCreateUnlockOrder(c *gin.Context) {
 	var req struct {
 		UserID         string `json:"userId" binding:"required"`
 		DramaID        string `json:"dramaId" binding:"required"`
@@ -68,7 +68,7 @@ func MiniCreateUnlockOrder(c *gin.Context) {
 	userID, _ := strconv.ParseInt(req.UserID, 10, 64)
 	dramaID, _ := strconv.ParseInt(req.DramaID, 10, 64)
 
-	result, err := Svc.MiniPayment.CreateUnlockOrder(userID, dramaID, req.TierKey, req.DeviceOS, req.CurrentEpisode)
+	result, err := a.services.MiniPayment.CreateUnlockOrder(userID, dramaID, req.TierKey, req.DeviceOS, req.CurrentEpisode)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrAppUserNotFound):
@@ -93,7 +93,7 @@ func MiniCreateUnlockOrder(c *gin.Context) {
 
 // MiniCreateSubscriptionOrder 创建订阅订单
 // POST /api/mini/orders/subscription  body: { userId, planId }
-func MiniCreateSubscriptionOrder(c *gin.Context) {
+func (a *Application) MiniCreateSubscriptionOrder(c *gin.Context) {
 	var req struct {
 		UserID   string `json:"userId" binding:"required"`
 		PlanID   string `json:"planId" binding:"required"`
@@ -108,7 +108,7 @@ func MiniCreateSubscriptionOrder(c *gin.Context) {
 	planID, _ := strconv.ParseInt(req.PlanID, 10, 64)
 	dramaID, _ := strconv.ParseInt(req.DramaID, 10, 64)
 
-	result, err := Svc.MiniPayment.CreateSubscriptionOrder(userID, planID, dramaID, req.DeviceOS)
+	result, err := a.services.MiniPayment.CreateSubscriptionOrder(userID, planID, dramaID, req.DeviceOS)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrAppUserNotFound):
@@ -129,7 +129,7 @@ func MiniCreateSubscriptionOrder(c *gin.Context) {
 
 // MiniSubmitPayResult 演示用：前端上报支付结果
 // POST /api/mini/orders/:orderNo/pay-result  body: { success: true|false }
-func MiniSubmitPayResult(c *gin.Context) {
+func (a *Application) MiniSubmitPayResult(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 	var req struct {
 		Success *bool `json:"success" binding:"required"`
@@ -139,7 +139,7 @@ func MiniSubmitPayResult(c *gin.Context) {
 		return
 	}
 
-	result, err := Svc.MiniPayment.SubmitPayResult(orderNo, *req.Success)
+	result, err := a.services.MiniPayment.SubmitPayResult(orderNo, *req.Success)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrOrderNotFound):
@@ -158,14 +158,14 @@ func MiniSubmitPayResult(c *gin.Context) {
 
 // MiniGetPaymentRecords 获取用户支付成功记录（订阅 + Beans 解锁）
 // GET /api/mini/users/:userId/payment-records
-func MiniGetPaymentRecords(c *gin.Context) {
+func (a *Application) MiniGetPaymentRecords(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("userId"), 10, 64)
 	if err != nil || userID <= 0 {
 		response.FailBadRequest(c, "无效的用户ID")
 		return
 	}
 
-	result, err := Svc.MiniPayment.PaymentRecords(userID)
+	result, err := a.services.MiniPayment.PaymentRecords(userID)
 	if err != nil {
 		if errors.Is(err, service.ErrAppUserNotFound) {
 			response.FailBadRequest(c, "用户不存在")

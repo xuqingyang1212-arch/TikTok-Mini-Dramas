@@ -6,6 +6,17 @@ export interface EpisodeTab {
   end: number
 }
 
+export interface SwipeDecisionInput {
+  distance: number
+  containerHeight: number
+  previousEpisodeNo?: number
+  nextEpisodeNo?: number
+}
+
+export type SwipeDecision =
+  | { type: "episode"; episodeNo: number }
+  | { type: "reset" }
+
 export function resolveEpisodeSelection(episodes: Episode[], preferredEpisode: number): number {
   if (!episodes.length) return preferredEpisode
 
@@ -13,6 +24,34 @@ export function resolveEpisodeSelection(episodes: Episode[], preferredEpisode: n
   return episodes.some((episode) => episode.episodeNo === boundedEpisode)
     ? boundedEpisode
     : episodes[0].episodeNo
+}
+
+export function resolveEpisodeSelectionChange(currentEpisode: number, selectedEpisode: number): number | null {
+  return currentEpisode === selectedEpisode ? null : selectedEpisode
+}
+
+export function resolveEpisodeTabIndex(episodeNo: number, perTab = 30): number {
+  return Math.floor((episodeNo - 1) / perTab)
+}
+
+export function computeSwipeThreshold(containerHeight: number): number {
+  return Math.min(96, Math.max(64, containerHeight * 0.1))
+}
+
+export function applySwipeResistance(distance: number): number {
+  return distance * 0.72
+}
+
+export function resolveSwipeDecision({
+  distance,
+  containerHeight,
+  previousEpisodeNo,
+  nextEpisodeNo,
+}: SwipeDecisionInput): SwipeDecision {
+  if (Math.abs(distance) < computeSwipeThreshold(containerHeight)) return { type: "reset" }
+  if (distance > 0 && nextEpisodeNo !== undefined) return { type: "episode", episodeNo: nextEpisodeNo }
+  if (distance < 0 && previousEpisodeNo !== undefined) return { type: "episode", episodeNo: previousEpisodeNo }
+  return { type: "reset" }
 }
 
 export function computeEpisodeTabs(episodes: Episode[], perTab = 30): EpisodeTab[] {

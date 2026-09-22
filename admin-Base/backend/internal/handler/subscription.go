@@ -11,7 +11,7 @@ import (
 
 // ─── List Subscription Plans ────────────────────────────────────────────────
 
-func ListSubscriptionPlans(c *gin.Context) {
+func (a *Application) ListSubscriptionPlans(c *gin.Context) {
 	page := QueryInt(c, "page", 1)
 	pageSize := QueryInt(c, "pageSize", 20)
 	appID := QueryInt64(c, "appId", 0)
@@ -24,7 +24,7 @@ func ListSubscriptionPlans(c *gin.Context) {
 		PageSize: pageSize,
 	}
 
-	list, total, err := Svc.Subscription.List(filter)
+	list, total, err := a.services.Subscription.List(filter)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -34,13 +34,13 @@ func ListSubscriptionPlans(c *gin.Context) {
 
 // ─── Get Subscription Plan ──────────────────────────────────────────────────
 
-func GetSubscriptionPlan(c *gin.Context) {
+func (a *Application) GetSubscriptionPlan(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	plan, err := Svc.Subscription.GetByID(id)
+	plan, err := a.services.Subscription.GetByID(id)
 	if err == service.ErrSubscriptionPlanNotFound {
 		response.FailNotFound(c, "订阅档位不存在")
 		return
@@ -63,14 +63,14 @@ type createSubscriptionPlanReq struct {
 	TierID      string  `json:"tierId" binding:"required"`
 }
 
-func CreateSubscriptionPlan(c *gin.Context) {
+func (a *Application) CreateSubscriptionPlan(c *gin.Context) {
 	var req createSubscriptionPlanReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailBadRequest(c, "参数错误："+err.Error())
 		return
 	}
 
-	plan, err := Svc.Subscription.Create(service.CreateSubscriptionPlanInput{
+	plan, err := a.services.Subscription.Create(service.CreateSubscriptionPlanInput{
 		AppID:       req.AppID,
 		Period:      req.Period,
 		ApplePrice:  req.ApplePrice,
@@ -107,7 +107,7 @@ type updateSubscriptionPlanReq struct {
 	TierID      *string  `json:"tierId"`
 }
 
-func UpdateSubscriptionPlan(c *gin.Context) {
+func (a *Application) UpdateSubscriptionPlan(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -139,7 +139,7 @@ func UpdateSubscriptionPlan(c *gin.Context) {
 		return
 	}
 
-	err := Svc.Subscription.Update(id, service.UpdateSubscriptionPlanInput{
+	err := a.services.Subscription.Update(id, service.UpdateSubscriptionPlanInput{
 		Period:      req.Period,
 		ApplePrice:  req.ApplePrice,
 		GooglePrice: req.GooglePrice,
@@ -171,13 +171,13 @@ func UpdateSubscriptionPlan(c *gin.Context) {
 
 // ─── Delete Subscription Plan ───────────────────────────────────────────────
 
-func DeleteSubscriptionPlan(c *gin.Context) {
+func (a *Application) DeleteSubscriptionPlan(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	err := Svc.Subscription.Delete(id)
+	err := a.services.Subscription.Delete(id)
 	if err == service.ErrSubscriptionPlanNotFound {
 		response.FailNotFound(c, "订阅档位不存在")
 		return

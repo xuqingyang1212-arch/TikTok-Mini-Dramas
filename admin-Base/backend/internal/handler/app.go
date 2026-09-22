@@ -11,7 +11,7 @@ import (
 
 // ─── List Apps ──────────────────────────────────────────────────────────────
 
-func ListApps(c *gin.Context) {
+func (a *Application) ListApps(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
@@ -25,7 +25,7 @@ func ListApps(c *gin.Context) {
 		PageSize:         pageSize,
 	}
 
-	apps, total, err := Svc.App.List(filter)
+	apps, total, err := a.services.App.List(filter)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -35,13 +35,13 @@ func ListApps(c *gin.Context) {
 
 // ─── Get App ────────────────────────────────────────────────────────────────
 
-func GetApp(c *gin.Context) {
+func (a *Application) GetApp(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	app, err := Svc.App.GetByID(id)
+	app, err := a.services.App.GetByID(id)
 	if err == service.ErrAppNotFound {
 		response.FailNotFound(c, "应用不存在")
 		return
@@ -66,13 +66,13 @@ type CreateAppReq struct {
 	AdPlacementID    string `json:"adPlacementId"`
 }
 
-func CreateApp(c *gin.Context) {
+func (a *Application) CreateApp(c *gin.Context) {
 	var req CreateAppReq
 	if !BindOrFail(c, &req) {
 		return
 	}
 
-	app, err := Svc.App.Create(service.CreateAppInput{
+	app, err := a.services.App.Create(service.CreateAppInput{
 		Name:             req.Name,
 		AppID:            req.AppID,
 		ClientKey:        req.ClientKey,
@@ -112,7 +112,7 @@ type UpdateAppReq struct {
 	AdPlacementID    string `json:"adPlacementId"`
 }
 
-func UpdateApp(c *gin.Context) {
+func (a *Application) UpdateApp(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -123,7 +123,7 @@ func UpdateApp(c *gin.Context) {
 		return
 	}
 
-	err := Svc.App.Update(id, service.UpdateAppInput{
+	err := a.services.App.Update(id, service.UpdateAppInput{
 		Name:             req.Name,
 		AppID:            req.AppID,
 		ClientKey:        req.ClientKey,
@@ -157,8 +157,8 @@ func UpdateApp(c *gin.Context) {
 
 // ─── Get Companies ──────────────────────────────────────────────────────────
 
-func GetAppCompanies(c *gin.Context) {
-	companies, err := Svc.App.GetCompanies()
+func (a *Application) GetAppCompanies(c *gin.Context) {
+	companies, err := a.services.App.GetCompanies()
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return

@@ -18,10 +18,10 @@ const (
 )
 
 var (
-	mu        sync.Mutex
-	lastTime  int64
-	sequence  int64
-	nodeID    int64 = 1
+	mu       sync.Mutex
+	lastTime int64
+	sequence int64
+	nodeID   int64 = 1
 )
 
 // NextID 生成下一个雪花ID

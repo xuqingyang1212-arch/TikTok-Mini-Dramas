@@ -51,17 +51,18 @@ type EpisodeService interface {
 	ListByDrama(dramaID int64) ([]EpisodeItem, error)
 	Create(input CreateEpisodeInput) (*model.Episode, error)
 	BatchCreate(input BatchCreateEpisodeInput) ([]EpisodeItem, error)
-	Update(id int64, videoURL string, duration int, fileSize int64) error
-	Delete(id int64) error
+	Update(dramaID, id int64, videoURL string, duration int, fileSize int64) error
+	Delete(dramaID, id int64) error
 }
 
 // ─── Errors ─────────────────────────────────────────────────────────────────
 
 var (
-	ErrEpisodeNotFound      = errors.New("episode not found")
-	ErrEpisodeNonContinuous = errors.New("episode numbers must be continuous starting from current max+1")
-	ErrEpisodeDuplicate     = errors.New("episode number already exists")
-	ErrEpisodeNotLast       = errors.New("only the last episode can be deleted")
+	ErrEpisodeNotFound           = errors.New("episode not found")
+	ErrEpisodeNonContinuous      = errors.New("episode numbers must be continuous starting from current max+1")
+	ErrEpisodeDuplicate          = errors.New("episode number already exists")
+	ErrEpisodeNotLast            = errors.New("only the last episode can be deleted")
+	ErrEpisodeDramaMustBeOffline = errors.New("drama must be offline before deleting episodes")
 )
 
 // deleteMediaFile removes a media file from disk.
@@ -235,9 +236,9 @@ func (s *episodeService) BatchCreate(input BatchCreateEpisodeInput) ([]EpisodeIt
 	return items, nil
 }
 
-func (s *episodeService) Update(id int64, videoURL string, duration int, fileSize int64) error {
+func (s *episodeService) Update(dramaID, id int64, videoURL string, duration int, fileSize int64) error {
 	var episode model.Episode
-	if err := s.db.First(&episode, id).Error; err != nil {
+	if err := s.db.Where("id = ? AND drama_id = ?", id, dramaID).First(&episode).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrEpisodeNotFound
 		}
@@ -263,26 +264,29 @@ func (s *episodeService) Update(id int64, videoURL string, duration int, fileSiz
 	return nil
 }
 
-func (s *episodeService) Delete(id int64) error {
+func (s *episodeService) Delete(dramaID, id int64) error {
 	var deleted model.Episode
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockDrama(tx, dramaID); err != nil {
+			return err
+		}
+
 		var episode model.Episode
-		if err := tx.First(&episode, id).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND drama_id = ?", id, dramaID).First(&episode).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrEpisodeNotFound
 			}
 			return err
 		}
-		if err := lockDrama(tx, episode.DramaID); err != nil {
+
+		var drama model.Drama
+		if err := tx.Select("id, status").First(&drama, dramaID).Error; err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&episode, id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrEpisodeNotFound
-			}
-			return err
+		if drama.Status != "下架" {
+			return ErrEpisodeDramaMustBeOffline
 		}
-		maxNo, err := getMaxEpisodeNo(tx, episode.DramaID)
+		maxNo, err := getMaxEpisodeNo(tx, dramaID)
 		if err != nil {
 			return err
 		}

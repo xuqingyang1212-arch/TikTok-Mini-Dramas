@@ -13,6 +13,7 @@ import (
 // RechargeOrderFilter 充值订单列表筛选条件
 type RechargeOrderFilter struct {
 	AppID             int64
+	AttributionLinkID string
 	OrderNo           string
 	ThirdPartyOrderNo string
 	DramaID           string
@@ -34,6 +35,7 @@ type RechargeOrderItem struct {
 	AppID             string  `json:"appId"`
 	AppName           string  `json:"appName"`
 	UserID            string  `json:"userId"`
+	AttributionLinkID *string `json:"attributionLinkId"`
 	OrderType         string  `json:"orderType"`
 	DramaID           string  `json:"dramaId,omitempty"`
 	DramaName         string  `json:"dramaName,omitempty"`
@@ -51,7 +53,7 @@ type RechargeOrderItem struct {
 
 type RechargeOrderService interface {
 	List(filter RechargeOrderFilter) ([]RechargeOrderItem, int64, error)
-	ListAll(filter RechargeOrderFilter) ([]RechargeOrderItem, error)
+	Iterate(filter RechargeOrderFilter, chunkSize int, yield func([]RechargeOrderItem) error) error
 }
 
 type rechargeOrderService struct {
@@ -62,6 +64,9 @@ func (s *rechargeOrderService) applyFilter(f RechargeOrderFilter) (*gorm.DB, err
 	db := s.db.Model(&model.PaymentOrder{})
 	if f.AppID > 0 {
 		db = db.Where("app_id = ?", f.AppID)
+	}
+	if f.AttributionLinkID != "" {
+		db = db.Where("attribution_link_id = ?", f.AttributionLinkID)
 	}
 	if f.OrderNo != "" {
 		db = db.Where("order_no LIKE ?", "%"+f.OrderNo+"%")
@@ -134,18 +139,33 @@ func (s *rechargeOrderService) List(f RechargeOrderFilter) ([]RechargeOrderItem,
 	return items, total, nil
 }
 
-// ListAll 按筛选返回全部结果（不分页），用于导出。
-func (s *rechargeOrderService) ListAll(f RechargeOrderFilter) ([]RechargeOrderItem, error) {
+func (s *rechargeOrderService) Iterate(f RechargeOrderFilter, chunkSize int, yield func([]RechargeOrderItem) error) error {
+	if chunkSize <= 0 {
+		chunkSize = 500
+	}
 	db, err := s.applyFilter(f)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var orders []model.PaymentOrder
-	if err := db.Order("created_at DESC").Find(&orders).Error; err != nil {
-		return nil, err
+	for offset := 0; ; offset += chunkSize {
+		var orders []model.PaymentOrder
+		if err := db.Order("created_at DESC, id DESC").Offset(offset).Limit(chunkSize).Find(&orders).Error; err != nil {
+			return err
+		}
+		if len(orders) == 0 {
+			return nil
+		}
+		items, _, err := s.buildItems(orders)
+		if err != nil {
+			return err
+		}
+		if err := yield(items); err != nil {
+			return err
+		}
+		if len(orders) < chunkSize {
+			return nil
+		}
 	}
-	items, _, err := s.buildItems(orders)
-	return items, err
 }
 
 func (s *rechargeOrderService) buildItems(orders []model.PaymentOrder) ([]RechargeOrderItem, int64, error) {
@@ -201,6 +221,7 @@ func (s *rechargeOrderService) buildItems(orders []model.PaymentOrder) ([]Rechar
 			AppID:             fmt.Sprintf("%d", o.AppID),
 			AppName:           appNames[o.AppID],
 			UserID:            fmt.Sprintf("%d", o.UserID),
+			AttributionLinkID: promotionLinkIDString(o.AttributionLinkID),
 			OrderType:         o.OrderType,
 			TierKey:           o.TierKey,
 			UnlockCount:       o.UnlockCount,

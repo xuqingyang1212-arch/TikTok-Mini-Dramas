@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, RightDrawer, Popconfirm, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
+import { ActionButton, FilterInput, SelectFilter, RightDrawer, Popconfirm, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
 import { paymentConfigApi, type PaymentConfigItem } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
@@ -410,7 +410,7 @@ export default function PaymentConfigManagement() {
             onClick={handleCreate}
             className="flex h-[30px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
           >
-            + 新建支付配置
+            新建支付配置
           </button>
         </div>
       )}
@@ -441,21 +441,18 @@ export default function PaymentConfigManagement() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       {canEdit && (
-                        <button
-                          onClick={() => handleEdit(row)}
-                          className="rounded border border-[#38c08f] px-2.5 py-1 text-[12px] text-[#38c08f] transition-colors hover:bg-[#f0fdf4]"
-                        >
+                        <ActionButton onClick={() => handleEdit(row)}>
                           编辑
-                        </button>
+                        </ActionButton>
                       )}
                       {canDelete && row.configType !== "全局默认" && (
                         <Popconfirm
                           title="确定删除此配置？"
                           onConfirm={() => handleDelete(row)}
                         >
-                          <button className="rounded border border-[#f87171] px-2.5 py-1 text-[12px] text-[#f87171] transition-colors hover:bg-[#fef2f2]">
+                          <ActionButton variant="danger">
                             删除
-                          </button>
+                          </ActionButton>
                         </Popconfirm>
                       )}
                     </div>

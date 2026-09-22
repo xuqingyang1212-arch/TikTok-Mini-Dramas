@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, RightDrawer, Popconfirm, FormInput, FormSelect, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
+import { ActionButton, FilterInput, SelectFilter, RightDrawer, Popconfirm, FormInput, FormSelect, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
 import { subscriptionApi, type SubscriptionPlanItem } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { usePagedQuery } from "@/hooks/use-paged-query"
 import { useAppOptions } from "@/hooks/use-app-options"
 
 // ─────────────── Types ───────────────
@@ -205,35 +206,32 @@ export default function SubscriptionManagement() {
   const { draft: draftFilters, active: appliedFilters, update: setDraftField, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page, pageSize, resetPage, paginationProps } = usePagination()
 
-  const [list, setList] = useState<SubscriptionPlanItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
   const { options: appOptionsRaw } = useAppOptions()
   const appOptions: AppOption[] = appOptionsRaw.map((app) => ({ id: Number(app.id), name: app.name }))
 
   const [drawerMode, setDrawerMode] = useState<"add" | "edit" | null>(null)
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlanItem | undefined>()
 
-  const fetchList = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await subscriptionApi.list({
-        page,
-        pageSize,
-        appId: appliedFilters.appId || undefined,
-        period: appliedFilters.period || undefined,
-        tierId: appliedFilters.tierId || undefined,
-      })
-      setList(res.list)
-      setTotal(res.total)
-    } catch {
-      toast.error("加载失败")
-    } finally {
-      setLoading(false)
-    }
-  }, [page, pageSize, appliedFilters])
+  const fetchList = useCallback(({ page: queryPage, pageSize: queryPageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => (
+    subscriptionApi.list({
+      page: queryPage,
+      pageSize: queryPageSize,
+      appId: filters?.appId || undefined,
+      period: filters?.period || undefined,
+      tierId: filters?.tierId || undefined,
+    })
+  ), [])
+  const { data: list, total, loading, error: listError, refresh: refreshList } = usePagedQuery<SubscriptionPlanItem, FilterForm>({
+    page,
+    pageSize,
+    filters: appliedFilters,
+    fetcher: fetchList,
+    preserveDataOnError: true,
+  })
 
-  useEffect(() => { void fetchList() }, [fetchList])
+  useEffect(() => {
+    if (listError) toast.error("加载失败")
+  }, [listError])
 
   function handleQuery() { applyFilters(); resetPage() }
   function handleReset() { resetFilters(); resetPage() }
@@ -264,7 +262,7 @@ export default function SubscriptionManagement() {
     try {
       await subscriptionApi.delete(row.id)
       toast.success("删除成功")
-      fetchList()
+      void refreshList()
     } catch (err: any) {
       toast.error(err.message || "删除失败")
     }
@@ -296,7 +294,7 @@ export default function SubscriptionManagement() {
         toast.success("更新成功")
       }
       setDrawerMode(null)
-      fetchList()
+      void refreshList()
     } catch (err: any) {
       toast.error(err.message || "保存失败")
     }
@@ -350,7 +348,7 @@ export default function SubscriptionManagement() {
             onClick={handleCreate}
             className="flex h-[30px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]"
           >
-            + 新建订阅配置
+            新建订阅配置
           </button>
         </div>
       )}
@@ -377,14 +375,14 @@ export default function SubscriptionManagement() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {canEdit && (
-                      <button onClick={() => handleEdit(row)} className="text-[#38c08f] hover:underline">编辑</button>
+                      <ActionButton onClick={() => handleEdit(row)}>编辑</ActionButton>
                     )}
                     {canDelete && (
                       <Popconfirm
                         title="确认删除该订阅配置？"
                         onConfirm={() => handleDelete(row)}
                       >
-                        <button className="text-[#dc2626] hover:underline">删除</button>
+                        <ActionButton variant="danger">删除</ActionButton>
                       </Popconfirm>
                     )}
                   </div>

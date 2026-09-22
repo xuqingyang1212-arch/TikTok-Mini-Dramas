@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	"scaffold-admin/internal/model"
 	"scaffold-admin/internal/pkg/datetime"
@@ -20,8 +21,9 @@ var (
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type MiniLoginResult struct {
-	UserID string `json:"userId"`
-	IsNew  bool   `json:"isNew"`
+	UserID                 string  `json:"userId"`
+	IsNew                  bool    `json:"isNew"`
+	CurrentPromotionLinkID *string `json:"currentPromotionLinkId"`
 	// 会员状态
 	Subscription MiniSubscriptionStatus `json:"subscription"`
 }
@@ -35,12 +37,13 @@ type MiniSubscriptionStatus struct {
 
 // MiniUserProfile 用户信息（个人中心用）
 type MiniUserProfile struct {
-	UserID       string                 `json:"userId"`
-	OpenID       string                 `json:"openId"`
-	AppName      string                 `json:"appName"`
-	ClientKey    string                 `json:"clientKey"`
-	CreatedAt    string                 `json:"createdAt"`
-	Subscription MiniSubscriptionStatus `json:"subscription"`
+	UserID                 string                 `json:"userId"`
+	OpenID                 string                 `json:"openId"`
+	AppName                string                 `json:"appName"`
+	ClientKey              string                 `json:"clientKey"`
+	CurrentPromotionLinkID *string                `json:"currentPromotionLinkId"`
+	CreatedAt              string                 `json:"createdAt"`
+	Subscription           MiniSubscriptionStatus `json:"subscription"`
 }
 
 type MiniDramaItem struct {
@@ -157,6 +160,14 @@ func (s *miniService) ListApps() ([]MiniAppItem, error) {
 
 // Login 小程序用户登录/注册
 // 如果用户存在则返回已有用户，否则创建新用户
+func promotionLinkIDString(linkID *int64) *string {
+	if linkID == nil {
+		return nil
+	}
+	value := strconv.FormatInt(*linkID, 10)
+	return &value
+}
+
 func (s *miniService) Login(appID, openID string) (*MiniLoginResult, error) {
 	// 1. 查找小程序
 	var app model.App
@@ -179,9 +190,10 @@ func (s *miniService) Login(appID, openID string) (*MiniLoginResult, error) {
 	if err == nil {
 		// 用户已存在
 		return &MiniLoginResult{
-			UserID:       fmt.Sprintf("%d", user.ID),
-			IsNew:        false,
-			Subscription: s.subStatus(user.ID),
+			UserID:                 fmt.Sprintf("%d", user.ID),
+			IsNew:                  false,
+			CurrentPromotionLinkID: promotionLinkIDString(user.CurrentPromotionLinkID),
+			Subscription:           s.subStatus(user.ID),
 		}, nil
 	}
 
@@ -204,9 +216,10 @@ func (s *miniService) Login(appID, openID string) (*MiniLoginResult, error) {
 	}
 
 	return &MiniLoginResult{
-		UserID:       fmt.Sprintf("%d", user.ID),
-		IsNew:        true,
-		Subscription: MiniSubscriptionStatus{Active: false},
+		UserID:                 fmt.Sprintf("%d", user.ID),
+		IsNew:                  true,
+		CurrentPromotionLinkID: nil,
+		Subscription:           MiniSubscriptionStatus{Active: false},
 	}, nil
 }
 
@@ -328,7 +341,7 @@ func (s *miniService) UnlockStatus(dramaID, userID int64) (*MiniUnlockStatus, er
 	items := make([]MiniEpisodeItem, len(episodes))
 	unlockedCount := 0
 	for i, episode := range episodes {
-		items[i] = buildMiniEpisodeItem(episode, drama.PaywallEpisode, entitlements)
+		items[i] = buildMiniEpisodeItem(episode, entitlements.PaywallEpisode, entitlements)
 		if items[i].IsUnlocked {
 			unlockedCount++
 		}
@@ -337,7 +350,7 @@ func (s *miniService) UnlockStatus(dramaID, userID int64) (*MiniUnlockStatus, er
 	return &MiniUnlockStatus{
 		DramaID:        fmt.Sprintf("%d", drama.ID),
 		EpisodeCount:   drama.EpisodeCount,
-		PaywallEpisode: drama.PaywallEpisode,
+		PaywallEpisode: entitlements.PaywallEpisode,
 		BySubscription: entitlements.Subscription,
 		UnlockedCount:  unlockedCount,
 		RemainingCount: drama.EpisodeCount - unlockedCount,
@@ -415,14 +428,19 @@ func (s *miniService) GetUserProfile(userID int64) (*MiniUserProfile, error) {
 	}
 
 	profile := &MiniUserProfile{
-		UserID:       fmt.Sprintf("%d", user.ID),
-		OpenID:       user.OpenID,
-		CreatedAt:    datetime.FormatUTC(user.CreatedAt),
-		Subscription: s.subStatus(user.ID),
+		UserID:                 fmt.Sprintf("%d", user.ID),
+		OpenID:                 user.OpenID,
+		CurrentPromotionLinkID: promotionLinkIDString(user.CurrentPromotionLinkID),
+		CreatedAt:              datetime.FormatUTC(user.CreatedAt),
+		Subscription:           s.subStatus(user.ID),
 	}
 
 	var app model.App
-	if err := s.db.First(&app, user.AppID).Error; err == nil {
+	if err := s.db.First(&app, user.AppID).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	} else {
 		profile.AppName = app.Name
 		profile.ClientKey = app.ClientKey
 	}
@@ -450,10 +468,10 @@ func (s *miniService) ListEpisodes(dramaID, userID int64) ([]MiniEpisodeItem, in
 	}
 	items := make([]MiniEpisodeItem, len(episodes))
 	for i, episode := range episodes {
-		items[i] = buildMiniEpisodeItem(episode, drama.PaywallEpisode, entitlements)
+		items[i] = buildMiniEpisodeItem(episode, entitlements.PaywallEpisode, entitlements)
 	}
 
-	return items, drama.PaywallEpisode, nil
+	return items, entitlements.PaywallEpisode, nil
 }
 
 // GetEpisode 获取单集播放信息
@@ -474,6 +492,6 @@ func (s *miniService) GetEpisode(dramaID, userID int64, episodeNo int) (*MiniEpi
 	if err != nil {
 		return nil, err
 	}
-	item := buildMiniEpisodeItem(episode, drama.PaywallEpisode, entitlements)
+	item := buildMiniEpisodeItem(episode, entitlements.PaywallEpisode, entitlements)
 	return &item, nil
 }

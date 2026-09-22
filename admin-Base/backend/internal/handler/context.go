@@ -1,6 +1,16 @@
 package handler
 
-import "scaffold-admin/internal/service"
+import (
+	"scaffold-admin/internal/service"
 
-// Svc holds the shared service instances, initialized during startup.
-var Svc *service.Services
+	"gorm.io/gorm"
+)
+
+type Application struct {
+	services *service.Services
+	db       *gorm.DB
+}
+
+func NewApplication(services *service.Services, db *gorm.DB) *Application {
+	return &Application{services: services, db: db}
+}

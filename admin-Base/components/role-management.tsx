@@ -6,10 +6,11 @@ import { cn } from "@/lib/utils"
 import { roleApi } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, RightDrawer, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
+import { ActionButton, FilterInput, RightDrawer, FilterBar, FilterActions, FixedHeaderTable, thClass } from "@/components/shared"
 import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { usePagedQuery } from "@/hooks/use-paged-query"
 
 // ─────────────── Permission Tree ───────────────
 interface PermNode {
@@ -216,7 +217,7 @@ function RoleDrawer({
     <RightDrawer width={520} zIndex={50} overlayOpacity={0.2} onClose={onClose}>
         <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-6 py-4">
           <span className="text-[15px] font-semibold text-[#111827]">
-            {mode === "add" ? "新增角色" : "编辑角色"}
+            {mode === "add" ? "新建角色" : "编辑角色"}
           </span>
           <button onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#9ca3af] transition-colors hover:bg-[#f3f4f6] hover:text-[#374151]">
@@ -280,41 +281,32 @@ function RoleDrawer({
 
 // ─────────────── Main Component ───────────────
 export default function RoleManagement() {
-  const [data, setData] = useState<Role[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
   const [permTree, setPermTree] = useState<PermNode[]>([])
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(DEFAULT_FILTERS)
   const { page, pageSize, resetPage, paginationProps } = usePagination()
   const [drawerMode, setDrawerMode] = useState<"add" | "edit" | null>(null)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
-  const [listTick, setListTick] = useState(0)
 
   const canAdd = usePerm("system.role.add")
   const canEdit = usePerm("system.role.edit")
 
-  const fetchRoles = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await roleApi.list({
-        page,
-        pageSize,
-        name: activeFilters.name.trim() || undefined,
-      })
-      const list = (res.list ?? []).map((row) => mapApiRole(row as Record<string, unknown>))
-      setData(list)
-      setTotal(res.total ?? 0)
-    } catch {
-      setData([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
+  const fetchRoles = useCallback(async ({ page: queryPage, pageSize: queryPageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => {
+    const res = await roleApi.list({
+      page: queryPage,
+      pageSize: queryPageSize,
+      name: filters?.name.trim() || undefined,
+    })
+    return {
+      list: (res.list ?? []).map((row) => mapApiRole(row as Record<string, unknown>)),
+      total: res.total ?? 0,
     }
-  }, [page, pageSize, activeFilters.name, listTick])
-
-  useEffect(() => {
-    void fetchRoles()
-  }, [fetchRoles])
+  }, [])
+  const { data, total, loading, refresh: refreshRoles } = usePagedQuery<Role, FilterForm>({
+    page,
+    pageSize,
+    filters: activeFilters,
+    fetcher: fetchRoles,
+  })
 
   useEffect(() => {
     roleApi
@@ -326,12 +318,10 @@ export default function RoleManagement() {
   function handleQuery() {
     applyFilters()
     resetPage()
-    setListTick((t) => t + 1)
   }
   function handleReset() {
     resetFilters()
     resetPage()
-    setListTick((t) => t + 1)
   }
 
   function openAdd() { setEditingRole(null); setDrawerMode("add") }
@@ -347,7 +337,7 @@ export default function RoleManagement() {
       })
       closeDrawer()
       toast.success("角色创建成功")
-      await fetchRoles()
+      await refreshRoles()
     } catch (e: any) {
       toast.errorFrom(e, "创建失败")
       throw e
@@ -363,7 +353,7 @@ export default function RoleManagement() {
       })
       closeDrawer()
       toast.success("角色更新成功")
-      await fetchRoles()
+      await refreshRoles()
     } catch (e: any) {
       toast.errorFrom(e, "更新失败")
       throw e
@@ -405,7 +395,7 @@ export default function RoleManagement() {
         <div className="flex shrink-0 items-center px-5 py-3">
           <button onClick={openAdd}
             className="flex h-[30px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]">
-            + 新增
+            新建角色
           </button>
         </div>
       )}
@@ -442,12 +432,9 @@ export default function RoleManagement() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {canEdit && (
-                          <button
-                            onClick={() => openEdit(row)}
-                            className="flex h-[26px] items-center rounded-[4px] border border-[#38c08f] bg-white px-2.5 text-[12px] text-[#38c08f] transition-colors hover:bg-[#edfaf4]"
-                          >
+                          <ActionButton onClick={() => openEdit(row)}>
                             编辑
-                          </button>
+                          </ActionButton>
                         )}
                       </div>
                     </td>

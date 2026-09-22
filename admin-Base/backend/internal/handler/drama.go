@@ -9,7 +9,7 @@ import (
 
 // ─── List Dramas ────────────────────────────────────────────────────────────
 
-func ListDramas(c *gin.Context) {
+func (a *Application) ListDramas(c *gin.Context) {
 	page := QueryInt(c, "page", 1)
 	pageSize := QueryInt(c, "pageSize", 20)
 
@@ -17,6 +17,7 @@ func ListDramas(c *gin.Context) {
 
 	filter := service.DramaListFilter{
 		DramaID:       TrimQuery(c, "dramaId"),
+		Keyword:       TrimQuery(c, "keyword"),
 		Name:          TrimQuery(c, "name"),
 		Language:      TrimQuery(c, "language"),
 		Status:        TrimQuery(c, "status"),
@@ -26,7 +27,7 @@ func ListDramas(c *gin.Context) {
 		PageSize:      pageSize,
 	}
 
-	list, total, err := Svc.Drama.List(filter)
+	list, total, err := a.services.Drama.List(filter)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -36,13 +37,13 @@ func ListDramas(c *gin.Context) {
 
 // ─── Get Drama ──────────────────────────────────────────────────────────────
 
-func GetDrama(c *gin.Context) {
+func (a *Application) GetDrama(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	drama, err := Svc.Drama.GetByID(id)
+	drama, err := a.services.Drama.GetByID(id)
 	if err == service.ErrDramaNotFound {
 		response.FailNotFound(c, "剧集不存在")
 		return
@@ -63,7 +64,7 @@ type createDramaReq struct {
 	PaywallEpisode int    `json:"paywallEpisode"`
 }
 
-func CreateDrama(c *gin.Context) {
+func (a *Application) CreateDrama(c *gin.Context) {
 	var req createDramaReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailBadRequest(c, "参数错误")
@@ -76,7 +77,7 @@ func CreateDrama(c *gin.Context) {
 		paywallEp = 2 // 默认卡点第2集
 	}
 
-	drama, err := Svc.Drama.Create(service.CreateDramaInput{
+	drama, err := a.services.Drama.Create(service.CreateDramaInput{
 		Name:           req.Name,
 		CoverURL:       req.CoverURL,
 		Language:       req.Language,
@@ -98,7 +99,7 @@ type updateDramaReq struct {
 	PaywallEpisode *int    `json:"paywallEpisode"`
 }
 
-func UpdateDrama(c *gin.Context) {
+func (a *Application) UpdateDrama(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -116,7 +117,7 @@ func UpdateDrama(c *gin.Context) {
 		return
 	}
 
-	err := Svc.Drama.Update(id, service.UpdateDramaInput{
+	err := a.services.Drama.Update(id, service.UpdateDramaInput{
 		Name:           req.Name,
 		CoverURL:       req.CoverURL,
 		Language:       req.Language,
@@ -139,13 +140,13 @@ func UpdateDrama(c *gin.Context) {
 
 // ─── Toggle Drama Status ────────────────────────────────────────────────────
 
-func ToggleDramaStatus(c *gin.Context) {
+func (a *Application) ToggleDramaStatus(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	err := Svc.Drama.ToggleStatus(id)
+	err := a.services.Drama.ToggleStatus(id)
 	if err == service.ErrDramaNotFound {
 		response.FailNotFound(c, "剧集不存在")
 		return

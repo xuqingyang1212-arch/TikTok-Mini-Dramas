@@ -5,6 +5,7 @@ import (
 
 	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/response"
+	"scaffold-admin/internal/pkg/xlsxstream"
 	"scaffold-admin/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,7 @@ func parseRechargeOrderFilter(c *gin.Context) service.RechargeOrderFilter {
 	createdAtFrom, createdAtTo := ParseChinaDateRange(c, "createdAtFrom", "createdAtTo")
 	return service.RechargeOrderFilter{
 		AppID:             QueryInt64(c, "appId", 0),
+		AttributionLinkID: TrimQuery(c, "linkId"),
 		OrderNo:           TrimQuery(c, "orderNo"),
 		ThirdPartyOrderNo: TrimQuery(c, "thirdPartyOrderNo"),
 		DramaID:           TrimQuery(c, "dramaId"),
@@ -32,9 +34,9 @@ func parseRechargeOrderFilter(c *gin.Context) service.RechargeOrderFilter {
 
 // ListRechargeOrders 充值订单列表
 // GET /api/v1/recharge-orders
-func ListRechargeOrders(c *gin.Context) {
+func (a *Application) ListRechargeOrders(c *gin.Context) {
 	filter := parseRechargeOrderFilter(c)
-	list, total, err := Svc.RechargeOrder.List(filter)
+	list, total, err := a.services.RechargeOrder.List(filter)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -136,38 +138,30 @@ func splitCSV(s string) []string {
 
 // ExportRechargeOrders 按当前筛选导出充值订单为 .xlsx。
 // GET /api/v1/recharge-orders/export
-func ExportRechargeOrders(c *gin.Context) {
+func (a *Application) ExportRechargeOrders(c *gin.Context) {
 	filter := parseRechargeOrderFilter(c)
-	items, err := Svc.RechargeOrder.ListAll(filter)
-	if err != nil {
-		response.FailServer(c, "导出失败")
-		return
-	}
-
-	f := excelize.NewFile()
-	defer f.Close()
-	sheet := "充值订单"
-	f.SetSheetName("Sheet1", sheet)
-
-	// 按前端「列设置」当前可见列导出：columns 传列 key（逗号分隔，保持顺序）。
-	// 未传时回退到默认全量列，保证向后兼容。
 	cols := parseExportColumns(c.Query("columns"))
-	for i, col := range cols {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(sheet, cell, rechargeColumnLabel(col))
+	headers := make([]any, len(cols))
+	for index, col := range cols {
+		headers[index] = rechargeColumnLabel(col)
 	}
-	for r, it := range items {
-		row := r + 2
-		for cIdx, col := range cols {
-			cell, _ := excelize.CoordinatesToCellName(cIdx+1, row)
-			f.SetCellValue(sheet, cell, rechargeColumnValue(col, it))
-		}
-	}
-
 	filename := fmt.Sprintf("recharge-orders-%s.xlsx", datetime.ChinaNow().Format("20060102150405"))
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	if err := f.Write(c.Writer); err != nil {
+	if err := xlsxstream.Write(c.Writer, xlsxstream.Options{Sheet: "充值订单", Headers: headers}, func(_ *excelize.File, yield func(xlsxstream.Row) error) error {
+		return a.services.RechargeOrder.Iterate(filter, 500, func(items []service.RechargeOrderItem) error {
+			for _, item := range items {
+				values := make([]any, len(cols))
+				for index, col := range cols {
+					values[index] = rechargeColumnValue(col, item)
+				}
+				if err := yield(xlsxstream.Row{Values: values}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}); err != nil {
 		response.FailServer(c, "导出失败")
 		return
 	}
@@ -175,13 +169,13 @@ func ExportRechargeOrders(c *gin.Context) {
 
 // 导出列的默认顺序（与前端 ALL_COLUMNS 的默认可见列一致）。
 var defaultRechargeColumns = []string{
-	"userId", "appName", "orderType", "drama", "beansCost", "subscribeAmount",
+	"userId", "attributionLinkId", "appName", "orderType", "drama", "beansCost", "subscribeAmount",
 	"deviceOs", "payStatus", "createdAt", "orderNo", "thirdPartyOrderNo",
 }
 
 // 前端可能传入的全部合法列 key，用于过滤非法参数。
 var validRechargeColumns = map[string]bool{
-	"userId": true, "appName": true, "orderType": true, "drama": true,
+	"userId": true, "attributionLinkId": true, "appName": true, "orderType": true, "drama": true,
 	"episodeList": true, "beansCost": true, "period": true,
 	"subscribeAmount": true, "deviceOs": true, "payStatus": true,
 	"createdAt": true, "paidAt": true, "orderNo": true, "thirdPartyOrderNo": true,
@@ -208,6 +202,8 @@ func rechargeColumnLabel(col string) string {
 	switch col {
 	case "userId":
 		return "用户ID"
+	case "attributionLinkId":
+		return "Linkid"
 	case "appName":
 		return "小程序"
 	case "orderType":
@@ -260,6 +256,11 @@ func rechargeColumnValue(col string, it service.RechargeOrderItem) interface{} {
 	switch col {
 	case "userId":
 		return it.UserID
+	case "attributionLinkId":
+		if it.AttributionLinkID != nil {
+			return *it.AttributionLinkID
+		}
+		return ""
 	case "appName":
 		return it.AppName
 	case "orderType":

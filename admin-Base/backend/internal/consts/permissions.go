@@ -11,7 +11,7 @@ package consts
 //   3. 在 router.go 用 RequirePerm(consts.XXX) 挂到对应路由
 //
 // 无需改种子 SQL：启动时 main.go 会调 SyncSuperAdminPermissions 以本文件
-// 为准，自动把缺失的权限点补进超管角色的 role_permissions。
+// 为准，清理已移除权限，并把缺失权限补进超管角色的 role_permissions。
 
 // PermissionNode 是权限树节点，用于 /permissions/tree 前端展示。
 type PermissionNode struct {
@@ -26,16 +26,26 @@ const (
 	// ═══════════════════════════════════════════════════════════════════════
 	// 资源管理 · 剧集管理
 	// ═══════════════════════════════════════════════════════════════════════
-	ResourceDramaList   = "resource.drama.list"
-	ResourceDramaAdd    = "resource.drama.add"
-	ResourceDramaEdit   = "resource.drama.edit"
-	ResourceDramaDelete = "resource.drama.delete"
+	ResourceDramaList = "resource.drama.list"
+	ResourceDramaAdd  = "resource.drama.add"
+	ResourceDramaEdit = "resource.drama.edit"
 
 	// ═══════════════════════════════════════════════════════════════════════
-	// 金融管理 · 充值订单
+	// 推广管理 · 推广链接
 	// ═══════════════════════════════════════════════════════════════════════
-	FinanceRechargeList   = "finance.recharge.list"
-	FinanceRechargeExport = "finance.recharge.export"
+	CampaignLinkList         = "campaign.link.list"
+	CampaignLinkAdd          = "campaign.link.add"
+	CampaignLinkExport       = "campaign.link.export"
+	CampaignMediaEventList   = "campaign.media-event.list"
+	CampaignMediaEventExport = "campaign.media-event.export"
+
+	// ═══════════════════════════════════════════════════════════════════════
+	// 订单管理
+	// ═══════════════════════════════════════════════════════════════════════
+	FinanceRechargeList    = "finance.recharge.list"
+	FinanceRechargeExport  = "finance.recharge.export"
+	FinanceAdSessionList   = "finance.ad-session.list"
+	FinanceAdSessionExport = "finance.ad-session.export"
 
 	// ═══════════════════════════════════════════════════════════════════════
 	// 运营配置 · 应用管理
@@ -48,13 +58,6 @@ const (
 	// 用户管理 · 小程序用户
 	// ═══════════════════════════════════════════════════════════════════════
 	UserAppUserList = "user.appuser.list"
-	UserAppUserEdit = "user.appuser.edit"
-
-	// ═══════════════════════════════════════════════════════════════════════
-	// 用户管理 · 资产配置
-	// ═══════════════════════════════════════════════════════════════════════
-	UserAssetList = "user.asset.list"
-	UserAssetEdit = "user.asset.edit"
 
 	// ═══════════════════════════════════════════════════════════════════════
 	// 运营配置 · 订阅配置
@@ -103,7 +106,33 @@ var PermissionTree = []PermissionNode{
 					{Key: ResourceDramaList, Label: "列表数据"},
 					{Key: ResourceDramaAdd, Label: "新增"},
 					{Key: ResourceDramaEdit, Label: "编辑"},
-					{Key: ResourceDramaDelete, Label: "删除"},
+				},
+			},
+		},
+	},
+
+	// ═══════════════════════════════════════════════════════════════════════
+	// 推广管理
+	// ═══════════════════════════════════════════════════════════════════════
+	{
+		Key:   "campaign",
+		Label: "推广管理",
+		Children: []PermissionNode{
+			{
+				Key:   "campaign.link",
+				Label: "推广链接",
+				Children: []PermissionNode{
+					{Key: CampaignLinkList, Label: "列表数据"},
+					{Key: CampaignLinkAdd, Label: "新增"},
+					{Key: CampaignLinkExport, Label: "导出"},
+				},
+			},
+			{
+				Key:   "campaign.media-event",
+				Label: "媒体事件",
+				Children: []PermissionNode{
+					{Key: CampaignMediaEventList, Label: "列表数据"},
+					{Key: CampaignMediaEventExport, Label: "导出"},
 				},
 			},
 		},
@@ -114,7 +143,7 @@ var PermissionTree = []PermissionNode{
 	// ═══════════════════════════════════════════════════════════════════════
 	{
 		Key:   "finance",
-		Label: "金融管理",
+		Label: "订单管理",
 		Children: []PermissionNode{
 			{
 				Key:   "finance.recharge",
@@ -122,6 +151,14 @@ var PermissionTree = []PermissionNode{
 				Children: []PermissionNode{
 					{Key: FinanceRechargeList, Label: "列表数据"},
 					{Key: FinanceRechargeExport, Label: "导出"},
+				},
+			},
+			{
+				Key:   "finance.ad-session",
+				Label: "广告会话",
+				Children: []PermissionNode{
+					{Key: FinanceAdSessionList, Label: "列表数据"},
+					{Key: FinanceAdSessionExport, Label: "导出"},
 				},
 			},
 		},
@@ -141,7 +178,7 @@ var PermissionTree = []PermissionNode{
 					{Key: OperationAppList, Label: "列表数据"},
 					{Key: OperationAppAdd, Label: "新增"},
 					{Key: OperationAppEdit, Label: "编辑"},
-							},
+				},
 			},
 			{
 				Key:   "operation.subs",
@@ -178,15 +215,6 @@ var PermissionTree = []PermissionNode{
 				Label: "用户管理",
 				Children: []PermissionNode{
 					{Key: UserAppUserList, Label: "列表数据"},
-					{Key: UserAppUserEdit, Label: "编辑"},
-				},
-			},
-			{
-				Key:   "user.asset",
-				Label: "资产配置",
-				Children: []PermissionNode{
-					{Key: UserAssetList, Label: "列表数据"},
-					{Key: UserAssetEdit, Label: "编辑"},
 				},
 			},
 		},

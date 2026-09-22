@@ -116,37 +116,43 @@ func (s *roleService) Update(id int64, in UpdateRoleInput) error {
 	return err
 }
 
-// SyncSuperAdminPermissions 以 consts.AllLeafKeys() 为准，补齐超管角色的权限点。
-// 启动时调用，保证新增权限点后无需改种子 SQL。幂等。
+// SyncSuperAdminPermissions 以 consts.AllLeafKeys() 为准清理已删除权限，
+// 并补齐超管角色的当前权限点。启动时调用，幂等。
 func (s *roleService) SyncSuperAdminPermissions() error {
-	var role model.Role
-	if err := s.db.Where("name = ?", SuperAdminRoleName).First(&role).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// 尚未种入超管角色（首次启动，SQL 未跑），此处不视为错误。
+	allowed := consts.AllLeafKeys()
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("permission_key NOT IN ?", allowed).Delete(&model.RolePermission{}).Error; err != nil {
+			return err
+		}
+
+		var role model.Role
+		if err := tx.Where("name = ?", SuperAdminRoleName).First(&role).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+
+		var existing []model.RolePermission
+		if err := tx.Where("role_id = ?", role.ID).Find(&existing).Error; err != nil {
+			return err
+		}
+		have := make(map[string]struct{}, len(existing))
+		for _, permission := range existing {
+			have[permission.PermissionKey] = struct{}{}
+		}
+
+		toAdd := make([]model.RolePermission, 0, len(allowed))
+		for _, key := range allowed {
+			if _, ok := have[key]; !ok {
+				toAdd = append(toAdd, model.RolePermission{RoleID: role.ID, PermissionKey: key})
+			}
+		}
+		if len(toAdd) == 0 {
 			return nil
 		}
-		return err
-	}
-
-	var existing []model.RolePermission
-	if err := s.db.Where("role_id = ?", role.ID).Find(&existing).Error; err != nil {
-		return err
-	}
-	have := make(map[string]struct{}, len(existing))
-	for _, p := range existing {
-		have[p.PermissionKey] = struct{}{}
-	}
-
-	var toAdd []model.RolePermission
-	for _, key := range consts.AllLeafKeys() {
-		if _, ok := have[key]; !ok {
-			toAdd = append(toAdd, model.RolePermission{RoleID: role.ID, PermissionKey: key})
-		}
-	}
-	if len(toAdd) == 0 {
-		return nil
-	}
-	return s.db.Create(&toAdd).Error
+		return tx.Create(&toAdd).Error
+	})
 }
 
 // syncRolePermissions 整体覆盖指定角色的 role_permissions 行。

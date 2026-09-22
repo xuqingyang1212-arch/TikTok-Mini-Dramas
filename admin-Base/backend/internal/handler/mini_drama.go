@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"strconv"
 	"errors"
+	"strconv"
 
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/service"
@@ -15,7 +15,7 @@ import (
 // MiniListDramas 获取已上架剧集列表
 // GET /api/mini/dramas?page=1&pageSize=20
 // 返回已上架剧集，按创建时间倒序
-func MiniListDramas(c *gin.Context) {
+func (a *Application) MiniListDramas(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
@@ -26,7 +26,7 @@ func MiniListDramas(c *gin.Context) {
 		pageSize = 20
 	}
 
-	list, total, err := Svc.Mini.ListDramas(page, pageSize)
+	list, total, err := a.services.Mini.ListDramas(page, pageSize)
 	if err != nil {
 		response.FailServer(c, err.Error())
 		return
@@ -42,7 +42,7 @@ func MiniListDramas(c *gin.Context) {
 
 // MiniGetDrama 获取剧集详情
 // GET /api/mini/dramas/:id
-func MiniGetDrama(c *gin.Context) {
+func (a *Application) MiniGetDrama(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -50,7 +50,7 @@ func MiniGetDrama(c *gin.Context) {
 		return
 	}
 
-	drama, err := Svc.Mini.GetDrama(id)
+	drama, err := a.services.Mini.GetDrama(id)
 	if err != nil {
 		response.FailNotFound(c, "剧集不存在或已下架")
 		return
@@ -62,7 +62,7 @@ func MiniGetDrama(c *gin.Context) {
 // MiniGetEpisode 获取单集播放信息
 // GET /api/mini/dramas/:id/episodes/:episodeNo
 // episodeNo 是集数（1, 2, 3...），不是 episode ID
-func MiniGetEpisode(c *gin.Context) {
+func (a *Application) MiniGetEpisode(c *gin.Context) {
 	dramaIDStr := c.Param("id")
 	episodeNoStr := c.Param("episodeNo")
 
@@ -79,7 +79,7 @@ func MiniGetEpisode(c *gin.Context) {
 	}
 
 	userID, _ := strconv.ParseInt(c.Query("userId"), 10, 64)
-	episode, err := Svc.Mini.GetEpisode(dramaID, userID, episodeNo)
+	episode, err := a.services.Mini.GetEpisode(dramaID, userID, episodeNo)
 	if err != nil {
 		response.FailNotFound(c, "该集不存在")
 		return
@@ -90,7 +90,7 @@ func MiniGetEpisode(c *gin.Context) {
 
 // MiniListEpisodes 获取剧集的所有单集列表
 // GET /api/mini/dramas/:id/episodes
-func MiniListEpisodes(c *gin.Context) {
+func (a *Application) MiniListEpisodes(c *gin.Context) {
 	dramaIDStr := c.Param("id")
 	dramaID, err := strconv.ParseInt(dramaIDStr, 10, 64)
 	if err != nil {
@@ -99,7 +99,7 @@ func MiniListEpisodes(c *gin.Context) {
 	}
 
 	userID, _ := strconv.ParseInt(c.Query("userId"), 10, 64)
-	episodes, paywallEpisode, err := Svc.Mini.ListEpisodes(dramaID, userID)
+	episodes, paywallEpisode, err := a.services.Mini.ListEpisodes(dramaID, userID)
 	if err != nil {
 		response.FailServer(c, err.Error())
 		return
@@ -114,14 +114,14 @@ func MiniListEpisodes(c *gin.Context) {
 
 // MiniUnlockStatus 用户在某部剧的逐集解锁详情
 // GET /api/mini/dramas/:id/unlock-status?userId=
-func MiniUnlockStatus(c *gin.Context) {
+func (a *Application) MiniUnlockStatus(c *gin.Context) {
 	dramaID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.FailBadRequest(c, "无效的剧集ID")
 		return
 	}
 	userID, _ := strconv.ParseInt(c.Query("userId"), 10, 64)
-	status, err := Svc.Mini.UnlockStatus(dramaID, userID)
+	status, err := a.services.Mini.UnlockStatus(dramaID, userID)
 	if err != nil {
 		response.FailServer(c, err.Error())
 		return
@@ -131,7 +131,7 @@ func MiniUnlockStatus(c *gin.Context) {
 
 // MiniReportWatch 观看上报：用户开始播放某剧某一集时上报
 // POST /api/mini/watch-report  body: { userId, dramaId, episodeNo }
-func MiniReportWatch(c *gin.Context) {
+func (a *Application) MiniReportWatch(c *gin.Context) {
 	var req struct {
 		UserID    string `json:"userId" binding:"required"`
 		DramaID   string `json:"dramaId" binding:"required"`
@@ -144,7 +144,7 @@ func MiniReportWatch(c *gin.Context) {
 	userID, _ := strconv.ParseInt(req.UserID, 10, 64)
 	dramaID, _ := strconv.ParseInt(req.DramaID, 10, 64)
 
-	result, err := Svc.Mini.ReportWatch(userID, dramaID, req.EpisodeNo)
+	result, err := a.services.Mini.ReportWatch(userID, dramaID, req.EpisodeNo)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrAppUserNotFound):

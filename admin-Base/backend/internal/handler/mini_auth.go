@@ -15,8 +15,8 @@ import (
 // MiniListApps 获取可用小程序列表
 // GET /api/mini/apps
 // 返回已启用的小程序列表，包含名称、Client Key、变现类型和 IAA 广告位 ID
-func MiniListApps(c *gin.Context) {
-	list, err := Svc.Mini.ListApps()
+func (a *Application) MiniListApps(c *gin.Context) {
+	list, err := a.services.Mini.ListApps()
 	if err != nil {
 		response.FailServer(c, err.Error())
 		return
@@ -28,7 +28,7 @@ func MiniListApps(c *gin.Context) {
 // POST /api/mini/auth/login
 // 请求体: { "appId": "string", "openId": "string" }
 // 返回: { "userId": "string", "isNew": bool }
-func MiniLogin(c *gin.Context) {
+func (a *Application) MiniLogin(c *gin.Context) {
 	var req struct {
 		AppID  string `json:"appId" binding:"required"`
 		OpenID string `json:"openId" binding:"required"`
@@ -38,7 +38,7 @@ func MiniLogin(c *gin.Context) {
 		return
 	}
 
-	result, err := Svc.Mini.Login(req.AppID, req.OpenID)
+	result, err := a.services.Mini.Login(req.AppID, req.OpenID)
 	if err != nil {
 		if errors.Is(err, service.ErrAppNotFound) {
 			response.FailBadRequest(c, "小程序不存在")
@@ -57,13 +57,13 @@ func MiniLogin(c *gin.Context) {
 
 // MiniGetUserProfile 获取用户信息（个人中心刷新会员状态用）
 // GET /api/mini/users/:userId
-func MiniGetUserProfile(c *gin.Context) {
+func (a *Application) MiniGetUserProfile(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("userId"), 10, 64)
 	if err != nil {
 		response.FailBadRequest(c, "无效的用户ID")
 		return
 	}
-	profile, err := Svc.Mini.GetUserProfile(userID)
+	profile, err := a.services.Mini.GetUserProfile(userID)
 	if err != nil {
 		if errors.Is(err, service.ErrAppUserNotFound) {
 			response.FailBadRequest(c, "用户不存在")

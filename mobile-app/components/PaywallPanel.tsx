@@ -236,10 +236,11 @@ export function PaywallPanel({
     dispatch({ type: "result_start", success })
 
     try {
-      await miniApi.reportPayResult(state.orderNo, success, { signal: controller.signal })
+      const result = await miniApi.reportPayResult(state.orderNo, success, { signal: controller.signal })
       if (controller.signal.aborted) return
-      dispatch({ type: "result_success", success })
-      if (success) {
+      const paid = result.payStatus === "paid"
+      dispatch({ type: "result_success", success: paid })
+      if (paid) {
         if (successTimerRef.current) window.clearTimeout(successTimerRef.current)
         successTimerRef.current = window.setTimeout(() => onPaySuccess(), 1000)
       }

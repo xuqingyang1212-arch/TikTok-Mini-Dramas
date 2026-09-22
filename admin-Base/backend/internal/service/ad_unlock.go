@@ -28,14 +28,15 @@ var (
 const adUnlockSessionTTL = 10 * time.Minute
 
 type AdUnlockSessionResult struct {
-	SessionNo     string `json:"sessionNo,omitempty"`
-	Status        string `json:"status"`
-	DramaID       string `json:"dramaId"`
-	EpisodeNo     int    `json:"episodeNo"`
-	AdPlacementID string `json:"adPlacementId,omitempty"`
-	ExpireAt      string `json:"expireAt,omitempty"`
-	UnlockType    string `json:"unlockType,omitempty"`
-	IsUnlocked    bool   `json:"isUnlocked"`
+	SessionNo         string  `json:"sessionNo,omitempty"`
+	Status            string  `json:"status"`
+	AttributionLinkID *string `json:"attributionLinkId"`
+	DramaID           string  `json:"dramaId"`
+	EpisodeNo         int     `json:"episodeNo"`
+	AdPlacementID     string  `json:"adPlacementId,omitempty"`
+	ExpireAt          string  `json:"expireAt,omitempty"`
+	UnlockType        string  `json:"unlockType,omitempty"`
+	IsUnlocked        bool    `json:"isUnlocked"`
 }
 
 type AdUnlockService interface {
@@ -76,14 +77,15 @@ func (s *adUnlockService) loadIAAUser(userID int64) (*model.AppUser, error) {
 
 func adSessionResult(session model.AdUnlockSession, unlockType string, unlocked bool) *AdUnlockSessionResult {
 	result := &AdUnlockSessionResult{
-		SessionNo:     session.SessionNo,
-		Status:        session.Status,
-		DramaID:       fmt.Sprintf("%d", session.DramaID),
-		EpisodeNo:     session.EpisodeNo,
-		AdPlacementID: session.AdPlacementID,
-		ExpireAt:      datetime.FormatUTC(session.ExpireAt),
-		UnlockType:    unlockType,
-		IsUnlocked:    unlocked,
+		SessionNo:         session.SessionNo,
+		Status:            session.Status,
+		AttributionLinkID: promotionLinkIDString(session.AttributionLinkID),
+		DramaID:           fmt.Sprintf("%d", session.DramaID),
+		EpisodeNo:         session.EpisodeNo,
+		AdPlacementID:     session.AdPlacementID,
+		ExpireAt:          datetime.FormatUTC(session.ExpireAt),
+		UnlockType:        unlockType,
+		IsUnlocked:        unlocked,
 	}
 	if session.Status != "pending" {
 		result.AdPlacementID = ""
@@ -127,17 +129,26 @@ func (s *adUnlockService) Create(userID, dramaID int64, episodeNo int) (*AdUnloc
 			return err
 		}
 
-		unlocked, unlockType, err := s.entitlements.resolveEpisode(tx, currentApp.ID, user.ID, drama.ID, episodeNo, drama.PaywallEpisode)
+		var currentUser model.AppUser
+		if err := tx.First(&currentUser, user.ID).Error; err != nil {
+			return ErrAppUserNotFound
+		}
+		operations, err := resolvePromotionOperations(tx, currentUser, drama)
+		if err != nil {
+			return err
+		}
+		unlocked, unlockType, err := s.entitlements.resolveEpisode(tx, currentApp.ID, user.ID, drama.ID, episodeNo, operations.PaywallEpisode)
 		if err != nil {
 			return err
 		}
 		if unlocked {
 			result = &AdUnlockSessionResult{
-				Status:     "already_unlocked",
-				DramaID:    fmt.Sprintf("%d", drama.ID),
-				EpisodeNo:  episodeNo,
-				UnlockType: unlockType,
-				IsUnlocked: true,
+				Status:            "already_unlocked",
+				AttributionLinkID: promotionLinkIDString(user.CurrentPromotionLinkID),
+				DramaID:           fmt.Sprintf("%d", drama.ID),
+				EpisodeNo:         episodeNo,
+				UnlockType:        unlockType,
+				IsUnlocked:        true,
 			}
 			return nil
 		}
@@ -161,18 +172,19 @@ func (s *adUnlockService) Create(userID, dramaID int64, episodeNo int) (*AdUnloc
 		}
 		activeKey := adSessionActiveKey(currentApp.ID, user.ID, drama.ID, episodeNo)
 		session := model.AdUnlockSession{
-			ID:            snowflake.NextID(),
-			SessionNo:     sessionNo,
-			AppID:         currentApp.ID,
-			UserID:        user.ID,
-			DramaID:       drama.ID,
-			EpisodeNo:     episodeNo,
-			AdPlacementID: currentApp.AdPlacementID,
-			Status:        "pending",
-			ActiveKey:     &activeKey,
-			ExpireAt:      now.Add(adUnlockSessionTTL),
-			CreatedAt:     now,
-			UpdatedAt:     now,
+			ID:                snowflake.NextID(),
+			SessionNo:         sessionNo,
+			AppID:             currentApp.ID,
+			UserID:            user.ID,
+			AttributionLinkID: currentUser.CurrentPromotionLinkID,
+			DramaID:           drama.ID,
+			EpisodeNo:         episodeNo,
+			AdPlacementID:     currentApp.AdPlacementID,
+			Status:            "pending",
+			ActiveKey:         &activeKey,
+			ExpireAt:          now.Add(adUnlockSessionTTL),
+			CreatedAt:         now,
+			UpdatedAt:         now,
 		}
 		if err := tx.Create(&session).Error; err != nil {
 			if isDuplicate(err) {

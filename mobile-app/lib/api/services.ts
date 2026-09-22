@@ -10,6 +10,7 @@ import type {
   SubscriptionOrder,
   UnlockOrder,
   UnlockStatus,
+  UserActivationResult,
   UserInfo,
   WatchReportResult,
 } from "./contracts"
@@ -30,6 +31,13 @@ export const miniApi = {
 
   getUser: (userId: string, options?: RequestInit) =>
     request<UserInfo>(`/users/${encodePathSegment(userId)}`, options),
+
+  activateUser: (userId: string, linkId: string, options?: RequestInit) =>
+    request<UserActivationResult>("/users/activate", {
+      ...options,
+      method: "POST",
+      body: JSON.stringify({ userId, linkId }),
+    }),
 
   getPaymentRecords: (userId: string, options?: RequestInit) =>
     request<PaymentRecords>(`/users/${encodePathSegment(userId)}/payment-records`, options),

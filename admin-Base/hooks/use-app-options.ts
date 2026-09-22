@@ -4,6 +4,8 @@ import { appApi } from "@/lib/api"
 export interface AppOptionItem {
   id: number | string
   name: string
+  monetizationType: string
+  status?: string
 }
 
 export function useAppOptions(pageSize = 1000) {
@@ -17,9 +19,14 @@ export function useAppOptions(pageSize = 1000) {
       setLoading(true)
       setError(null)
       try {
-        const res = await appApi.list<{ id: number; name: string }>({ page: 1, pageSize })
+        const res = await appApi.list<{ id: number; name: string; monetizationType: string; status?: string }>({ page: 1, pageSize })
         if (cancelled) return
-        setOptions((res.list ?? []).map((item) => ({ id: item.id, name: item.name })))
+        setOptions((res.list ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          monetizationType: item.monetizationType,
+          status: item.status,
+        })))
       } catch (err) {
         if (!cancelled) {
           setOptions([])

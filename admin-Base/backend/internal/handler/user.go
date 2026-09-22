@@ -14,9 +14,9 @@ import (
 // 创建/重置用户密码时的格式校验。登录流程改为邮箱 + 验证码后，密码仅用于账号存档字段。
 var passwordRe = regexp.MustCompile(`^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?~` + "`" + `]{6,24}$`)
 
-func ListUsers(c *gin.Context) {
+func (a *Application) ListUsers(c *gin.Context) {
 	p := pagination.Parse(c)
-	users, total, err := Svc.User.List(service.UserListFilter{
+	users, total, err := a.services.User.List(service.UserListFilter{
 		Name:     TrimQuery(c, "name"),
 		Email:    TrimQuery(c, "email"),
 		Status:   TrimQuery(c, "status"),
@@ -38,7 +38,7 @@ type CreateUserReq struct {
 	RoleIDs  []int64 `json:"roleIds"`
 }
 
-func CreateUser(c *gin.Context) {
+func (a *Application) CreateUser(c *gin.Context) {
 	var req CreateUserReq
 	if !BindOrFail(c, &req) {
 		return
@@ -52,7 +52,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := Svc.User.Create(service.CreateUserInput{
+	user, err := a.services.User.Create(service.CreateUserInput{
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: req.Password,
@@ -75,7 +75,7 @@ type UpdateUserReq struct {
 	Status  string  `json:"status"`
 }
 
-func UpdateUser(c *gin.Context) {
+func (a *Application) UpdateUser(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -85,7 +85,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := Svc.User.Update(id, service.UpdateUserInput{
+	user, err := a.services.User.Update(id, service.UpdateUserInput{
 		Status:  req.Status,
 		RoleIDs: req.RoleIDs,
 	})

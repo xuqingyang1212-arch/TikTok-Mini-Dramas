@@ -9,7 +9,7 @@ import (
 
 // ─── List Payment Configs ───────────────────────────────────────────────────
 
-func ListPaymentConfigs(c *gin.Context) {
+func (a *Application) ListPaymentConfigs(c *gin.Context) {
 	page := QueryInt(c, "page", 1)
 	pageSize := QueryInt(c, "pageSize", 20)
 	appID := QueryInt64(c, "appId", 0)
@@ -22,7 +22,7 @@ func ListPaymentConfigs(c *gin.Context) {
 		PageSize: pageSize,
 	}
 
-	list, total, err := Svc.PaymentConfig.List(filter)
+	list, total, err := a.services.PaymentConfig.List(filter)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -32,13 +32,13 @@ func ListPaymentConfigs(c *gin.Context) {
 
 // ─── Get Payment Config ─────────────────────────────────────────────────────
 
-func GetPaymentConfig(c *gin.Context) {
+func (a *Application) GetPaymentConfig(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	config, err := Svc.PaymentConfig.GetByID(id)
+	config, err := a.services.PaymentConfig.GetByID(id)
 	if err == service.ErrPaymentConfigNotFound {
 		response.FailNotFound(c, "支付配置不存在")
 		return
@@ -59,14 +59,14 @@ type createPaymentConfigReq struct {
 	Description string `json:"description"`
 }
 
-func CreatePaymentConfig(c *gin.Context) {
+func (a *Application) CreatePaymentConfig(c *gin.Context) {
 	var req createPaymentConfigReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailBadRequest(c, "参数错误：每集Beans必须大于0")
 		return
 	}
 
-	config, err := Svc.PaymentConfig.Create(service.CreatePaymentConfigInput{
+	config, err := a.services.PaymentConfig.Create(service.CreatePaymentConfigInput{
 		AppID:       req.AppID,
 		DramaID:     req.DramaID,
 		BeansPerEp:  req.BeansPerEp,
@@ -90,7 +90,7 @@ type updatePaymentConfigReq struct {
 	Description *string `json:"description"`
 }
 
-func UpdatePaymentConfig(c *gin.Context) {
+func (a *Application) UpdatePaymentConfig(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -107,7 +107,7 @@ func UpdatePaymentConfig(c *gin.Context) {
 		return
 	}
 
-	err := Svc.PaymentConfig.Update(id, service.UpdatePaymentConfigInput{
+	err := a.services.PaymentConfig.Update(id, service.UpdatePaymentConfigInput{
 		BeansPerEp:  req.BeansPerEp,
 		Description: req.Description,
 	})
@@ -124,13 +124,13 @@ func UpdatePaymentConfig(c *gin.Context) {
 
 // ─── Delete Payment Config ──────────────────────────────────────────────────
 
-func DeletePaymentConfig(c *gin.Context) {
+func (a *Application) DeletePaymentConfig(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	err := Svc.PaymentConfig.Delete(id)
+	err := a.services.PaymentConfig.Delete(id)
 	if err == service.ErrPaymentConfigNotFound {
 		response.FailNotFound(c, "支付配置不存在")
 		return

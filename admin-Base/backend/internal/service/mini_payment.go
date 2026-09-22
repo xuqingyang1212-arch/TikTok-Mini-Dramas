@@ -40,23 +40,25 @@ type PaywallSubPlan struct {
 }
 
 type MiniPaywallResult struct {
-	DramaID           string           `json:"dramaId"`
-	TotalEpisodes     int              `json:"totalEpisodes"`
-	PaywallEpisode    int              `json:"paywallEpisode"`
-	BeansPerEp        int              `json:"beansPerEp"`
-	UnlockedCount     int              `json:"unlockedCount"`
-	RemainingCount    int              `json:"remainingCount"`
-	HasSubscription   bool             `json:"hasSubscription"`
-	Tiers             []PaywallTier    `json:"tiers"`
-	SubscriptionPlans []PaywallSubPlan `json:"subscriptionPlans"`
+	DramaID                string           `json:"dramaId"`
+	CurrentPromotionLinkID *string          `json:"currentPromotionLinkId"`
+	TotalEpisodes          int              `json:"totalEpisodes"`
+	PaywallEpisode         int              `json:"paywallEpisode"`
+	BeansPerEp             int              `json:"beansPerEp"`
+	UnlockedCount          int              `json:"unlockedCount"`
+	RemainingCount         int              `json:"remainingCount"`
+	HasSubscription        bool             `json:"hasSubscription"`
+	Tiers                  []PaywallTier    `json:"tiers"`
+	SubscriptionPlans      []PaywallSubPlan `json:"subscriptionPlans"`
 }
 
 type MiniOrderResult struct {
-	OrderNo   string `json:"orderNo"`
-	OrderType string `json:"orderType"`
-	PayStatus string `json:"payStatus"`
-	BeansCost int    `json:"beansCost,omitempty"`
-	Episodes  []int  `json:"episodes,omitempty"`
+	OrderNo           string  `json:"orderNo"`
+	OrderType         string  `json:"orderType"`
+	PayStatus         string  `json:"payStatus"`
+	AttributionLinkID *string `json:"attributionLinkId"`
+	BeansCost         int     `json:"beansCost,omitempty"`
+	Episodes          []int   `json:"episodes,omitempty"`
 }
 
 type MiniPayResultOutput struct {

@@ -1,15 +1,16 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, FormSelect, FilterBar, FilterActions, RightDrawer, FixedHeaderTable, thClass } from "@/components/shared"
-import { appApi } from "@/lib/api"
+import { ActionButton, FilterInput, SelectFilter, FormSelect, FilterBar, FilterActions, RightDrawer, FixedHeaderTable, MonetizationBadge, thClass } from "@/components/shared"
+import { appApi, type MonetizationType } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
+import { usePagedQuery } from "@/hooks/use-paged-query"
 
 // ─────────────── Types ───────────────
 interface AppItem {
@@ -18,7 +19,7 @@ interface AppItem {
   appId: string
   clientKey: string
   company: string
-  monetizationType: string
+  monetizationType: MonetizationType
   adPlacementId: string
   status: string
   createdAt: string
@@ -30,7 +31,7 @@ interface AppForm {
   clientKey: string
   clientSecret: string
   company: string
-  monetizationType: string
+  monetizationType: MonetizationType | ""
   adPlacementId: string
 }
 
@@ -205,7 +206,7 @@ function AppDrawer({
             label="变现类型"
             value={form.monetizationType}
             onChange={(v) => {
-              setField("monetizationType", v)
+              setField("monetizationType", v as MonetizationType | "")
               if (v !== "IAA") setField("adPlacementId", "")
             }}
             options={monetizationTypeOptions}
@@ -249,38 +250,27 @@ export default function AppManagement() {
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
 
-  // ─── Data ───
-  const [data, setData] = useState<AppItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-
   // ─── Drawer ───
   const [drawerMode, setDrawerMode] = useState<"add" | "edit" | null>(null)
   const [editingApp, setEditingApp] = useState<AppItem | null>(null)
 
   // ─── Fetch list ───
-  const fetchList = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await appApi.list<AppItem>({
-        page: currentPage,
-        pageSize,
-        name: activeFilters.name.trim() || undefined,
-        appId: activeFilters.appId.trim() || undefined,
-        company: activeFilters.company.trim() || undefined,
-        monetizationType: activeFilters.monetizationType || undefined,
-      })
-      setData(res.list || [])
-      setTotal(res.total ?? 0)
-    } catch {
-      setData([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage, pageSize, activeFilters])
-
-  useEffect(() => { void fetchList() }, [fetchList])
+  const fetchList = useCallback(({ page, pageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => (
+    appApi.list<AppItem>({
+      page,
+      pageSize,
+      name: filters?.name.trim() || undefined,
+      appId: filters?.appId.trim() || undefined,
+      company: filters?.company.trim() || undefined,
+      monetizationType: filters?.monetizationType || undefined,
+    })
+  ), [])
+  const { data, total, loading, error: listError, refresh: refreshList } = usePagedQuery<AppItem, FilterForm>({
+    page: currentPage,
+    pageSize,
+    filters: activeFilters,
+    fetcher: fetchList,
+  })
 
   // ─── Handlers ───
   function handleQuery() { applyFilters(); resetPage() }
@@ -292,11 +282,11 @@ export default function AppManagement() {
 
   async function handleAdd(form: AppForm) {
     try {
-      await appApi.create(form)
+      await appApi.create({ ...form, monetizationType: form.monetizationType as MonetizationType })
       toast.success("创建成功")
       closeDrawer()
       resetPage()
-      await fetchList()
+      await refreshList()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "创建失败")
       throw e
@@ -306,10 +296,10 @@ export default function AppManagement() {
   async function handleEdit(form: AppForm) {
     if (!editingApp) return
     try {
-      await appApi.update(editingApp.id, form)
+      await appApi.update(editingApp.id, { ...form, monetizationType: form.monetizationType as MonetizationType })
       toast.success("更新成功")
       closeDrawer()
-      await fetchList()
+      await refreshList()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "更新失败")
       throw e
@@ -343,12 +333,13 @@ export default function AppManagement() {
         <div className="flex shrink-0 items-center px-5 py-3">
           <button onClick={openAdd}
             className="flex h-[30px] items-center rounded-[6px] bg-[#38c08f] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#2da87a]">
-            + 新建应用
+            新建应用
           </button>
         </div>
       )}
 
       {/* 表格区 */}
+      {listError && <div className="px-5 py-2 text-[13px] text-[#dc2626]">{listError}</div>}
       <FixedHeaderTable
         minWidth={820}
         columns={["w-[180px]", "w-[220px]", "w-[280px]", "", "w-[90px]"]}
@@ -364,13 +355,12 @@ export default function AppManagement() {
                   <td className="px-4 py-3 text-[12.5px] font-medium text-[#111827] whitespace-nowrap">{row.name}</td>
                   <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.appId}</td>
                   <td className="px-4 py-3 text-[12.5px] text-[#4b5563] whitespace-nowrap">{row.company}</td>
-                  <td className="px-4 py-3 text-[12.5px] text-[#4b5563] whitespace-nowrap">{row.monetizationType}</td>
+                  <td className="px-4 py-3 whitespace-nowrap"><MonetizationBadge type={row.monetizationType} /></td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {canEdit && (
-                      <button onClick={() => openEdit(row)}
-                        className="flex h-[26px] items-center rounded-[4px] border border-[#38c08f] bg-white px-2.5 text-[12px] text-[#38c08f] transition-colors hover:bg-[#edfaf4]">
+                      <ActionButton onClick={() => openEdit(row)}>
                         编辑
-                      </button>
+                      </ActionButton>
                     )}
                   </td>
                 </tr>

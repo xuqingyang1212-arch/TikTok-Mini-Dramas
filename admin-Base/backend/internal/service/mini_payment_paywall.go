@@ -61,6 +61,8 @@ func buildTiers(remaining, beansPerEp int) []PaywallTier {
 // appID 为可选入参：未登录（userID<=0）时用于解析订阅档位与每集 Beans 配置；
 // 若用户已登录，则以用户实际所属小程序为准。
 func (s *miniPaymentService) GetPaywall(dramaID, userID, appID int64, currentEpisode int) (*MiniPaywallResult, error) {
+	var currentPromotionLinkID *string
+	var user *model.AppUser
 	var drama model.Drama
 	if err := s.db.Where("id = ? AND status = ?", dramaID, "上架").First(&drama).Error; err != nil {
 		return nil, ErrDramaNotAvailable
@@ -71,8 +73,10 @@ func (s *miniPaymentService) GetPaywall(dramaID, userID, appID int64, currentEpi
 		if err != nil {
 			return nil, err
 		}
-		// 用户实际所属小程序优先
+		user = u
+		// 用户实际所属小程序和服务端当前归因优先。
 		appID = u.AppID
+		currentPromotionLinkID = promotionLinkIDString(u.CurrentPromotionLinkID)
 	}
 
 	if appID <= 0 {
@@ -85,6 +89,17 @@ func (s *miniPaymentService) GetPaywall(dramaID, userID, appID int64, currentEpi
 	beansPerEp, err := s.payConfig.GetEffectiveConfig(appID, dramaID)
 	if err != nil || beansPerEp < 1 {
 		beansPerEp = 100
+	}
+	paywallEpisode := drama.PaywallEpisode
+	if user != nil {
+		operations, err := resolvePromotionOperations(s.db, *user, drama)
+		if err != nil {
+			return nil, err
+		}
+		paywallEpisode = operations.PaywallEpisode
+		if operations.BeansPerEp != nil {
+			beansPerEp = *operations.BeansPerEp
+		}
 	}
 
 	unlocked, err := s.UnlockedEpisodes(userID, dramaID)
@@ -127,14 +142,15 @@ func (s *miniPaymentService) GetPaywall(dramaID, userID, appID int64, currentEpi
 	}
 
 	return &MiniPaywallResult{
-		DramaID:           fmt.Sprintf("%d", drama.ID),
-		TotalEpisodes:     drama.EpisodeCount,
-		PaywallEpisode:    drama.PaywallEpisode,
-		BeansPerEp:        beansPerEp,
-		UnlockedCount:     unlockedCount,
-		RemainingCount:    remaining,
-		HasSubscription:   hasSub,
-		Tiers:             tiers,
-		SubscriptionPlans: subPlans,
+		DramaID:                fmt.Sprintf("%d", drama.ID),
+		CurrentPromotionLinkID: currentPromotionLinkID,
+		TotalEpisodes:          drama.EpisodeCount,
+		PaywallEpisode:         paywallEpisode,
+		BeansPerEp:             beansPerEp,
+		UnlockedCount:          unlockedCount,
+		RemainingCount:         remaining,
+		HasSubscription:        hasSub,
+		Tiers:                  tiers,
+		SubscriptionPlans:      subPlans,
 	}, nil
 }

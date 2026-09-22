@@ -24,19 +24,20 @@ func (UserUnlock) TableName() string { return "user_unlocks" }
 
 // AdUnlockSession 记录一次激励广告观看与单集解锁的状态机。
 type AdUnlockSession struct {
-	ID            int64      `gorm:"primaryKey" json:"id"`
-	SessionNo     string     `gorm:"size:64;not null;uniqueIndex" json:"sessionNo"`
-	AppID         int64      `gorm:"not null;index:idx_ad_session_target,priority:1" json:"appId"`
-	UserID        int64      `gorm:"not null;index:idx_ad_session_target,priority:2" json:"userId"`
-	DramaID       int64      `gorm:"not null;index:idx_ad_session_target,priority:3" json:"dramaId"`
-	EpisodeNo     int        `gorm:"not null;index:idx_ad_session_target,priority:4" json:"episodeNo"`
-	AdPlacementID string     `gorm:"size:128;not null" json:"adPlacementId"`
-	Status        string     `gorm:"size:16;not null;default:pending;index:idx_ad_session_target,priority:5" json:"status"` // pending/completed/canceled/expired
-	ActiveKey     *string    `gorm:"size:128;uniqueIndex" json:"-"`                                                         // pending 会话目标唯一键，终态置空
-	ExpireAt      time.Time  `gorm:"not null;index" json:"expireAt"`
-	CompletedAt   *time.Time `json:"completedAt,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	ID                int64      `gorm:"primaryKey" json:"id"`
+	SessionNo         string     `gorm:"size:64;not null;uniqueIndex" json:"sessionNo"`
+	AppID             int64      `gorm:"not null;index:idx_ad_session_target,priority:1" json:"appId"`
+	UserID            int64      `gorm:"not null;index:idx_ad_session_target,priority:2" json:"userId"`
+	AttributionLinkID *int64     `gorm:"index" json:"-"`
+	DramaID           int64      `gorm:"not null;index:idx_ad_session_target,priority:3" json:"dramaId"`
+	EpisodeNo         int        `gorm:"not null;index:idx_ad_session_target,priority:4" json:"episodeNo"`
+	AdPlacementID     string     `gorm:"size:128;not null" json:"adPlacementId"`
+	Status            string     `gorm:"size:16;not null;default:pending;index:idx_ad_session_target,priority:5" json:"status"` // pending/completed/canceled/expired
+	ActiveKey         *string    `gorm:"size:128;uniqueIndex" json:"-"`                                                         // pending 会话目标唯一键，终态置空
+	ExpireAt          time.Time  `gorm:"not null;index" json:"expireAt"`
+	CompletedAt       *time.Time `json:"completedAt,omitempty"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
 }
 
 func (AdUnlockSession) TableName() string { return "ad_unlock_sessions" }
@@ -60,11 +61,12 @@ func (UserSubscription) TableName() string { return "user_subscriptions" }
 
 // PaymentOrder 支付订单，统一记录 Beans 解锁订单与订阅订单。
 type PaymentOrder struct {
-	ID        int64  `gorm:"primaryKey" json:"id"`
-	OrderNo   string `gorm:"size:64;not null;uniqueIndex" json:"orderNo"`
-	AppID     int64  `gorm:"not null;index" json:"appId"`
-	UserID    int64  `gorm:"not null;index" json:"userId"`
-	OrderType string `gorm:"size:16;not null" json:"orderType"` // unlock / subscription
+	ID                int64  `gorm:"primaryKey" json:"id"`
+	OrderNo           string `gorm:"size:64;not null;uniqueIndex" json:"orderNo"`
+	AppID             int64  `gorm:"not null;index" json:"appId"`
+	UserID            int64  `gorm:"not null;index" json:"userId"`
+	AttributionLinkID *int64 `gorm:"index" json:"-"`
+	OrderType         string `gorm:"size:16;not null" json:"orderType"` // unlock / subscription
 
 	// 解锁类订单字段
 	DramaID     int64  `gorm:"default:0" json:"dramaId"`

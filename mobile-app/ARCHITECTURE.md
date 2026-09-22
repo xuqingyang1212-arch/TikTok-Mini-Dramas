@@ -29,8 +29,9 @@ flowchart LR
 
 ```text
 mobile-app/
-├── app/                       # App Router、根页面和全局样式
+├── app/                       # App Router、根页面、物理 /player 路由和全局布局
 ├── components/                # 首页、登录、播放器、付费墙和个人中心
+│   ├── app-shell/             # 会话、浏览器导航和剧集选择 Hooks
 │   ├── video-player/          # 播放器子组件、Hooks 和纯函数
 │   └── payment/               # 支付相关子组件或状态逻辑
 ├── lib/
@@ -103,11 +104,15 @@ transport → platform
 
 [lib/api/services.ts](./lib/api/services.ts) 按登录、应用、短剧、观看、支付和广告等领域提供语义化方法。组件只调用 Service，不拼 URL，不理解统一响应壳。
 
+推广链接采用多页面播放地址 `/player?dramaId=xxx&linkId=xxx`。根布局统一读取小驼峰 `linkId`：只有任意页面被外部直接打开或浏览器刷新且 URL 携带 `linkId` 时，才在取得 `userId` 后通过 Service 调用 `/api/mini/users/activate`（`userId + linkId`）；客户端内部路由跳转不得重复上报。激活接口只更新归因，不返回剧集或触发跳转，播放器导航始终由当前 URL 的 `dramaId` 决定。
+
 ## 4. 页面和组件边界
 
 ### 页面容器
 
-`app/` 只负责 Next.js 入口、全局布局和顶层页面装配。复杂业务不得全部堆积到 `app/page.tsx`。
+`app/` 只负责 Next.js 入口、全局布局和顶层页面装配。根页面与物理 `/player` 页面复用 `AppController`，不得复制会话、导航或剧集加载状态。复杂业务不得重新堆积到 `app/page.tsx`。
+
+`AppController` 只组合页面级流程；会话恢复、浏览器 History 和剧集选择分别由 `app-shell/useAppSession`、`useBrowserNavigation`、`useDramaSelection` 管理。推广归因由根布局中的 `PromotionActivation` 独立处理，与 `dramaId` 导航职责分离。
 
 ### 业务组件
 
@@ -217,7 +222,7 @@ flowchart TD
 - 成功、失败和关闭。
 - 请求中止及定时器清理。
 
-订单请求必须携带用户实际选中的 `currentEpisode`。支付成功后不直接伪造本地权益，应重新获取服务端结果。
+订单请求必须携带用户实际选中的 `currentEpisode`。模拟支付参数只表达本次演示操作，界面终态必须采用服务端响应的 `payStatus`，不得根据请求参数猜测支付结果；仅当服务端返回 `paid` 时进入成功页并重新获取服务端权益。
 
 ## 10. 国际化与时间
 

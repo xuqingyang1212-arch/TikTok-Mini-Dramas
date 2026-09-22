@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { ListPagination } from "@/components/list-pagination"
-import { FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, RightDrawer, type DateRangeValue, FixedHeaderTable, thClass } from "@/components/shared"
+import { ActionButton, FilterInput, SelectFilter, DateRangePicker, FilterBar, FilterActions, RightDrawer, type DateRangeValue, FixedHeaderTable, thClass } from "@/components/shared"
 import { appUserApi } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { formatDateTime } from "@/lib/format"
@@ -70,6 +70,7 @@ const UNLOCK_TYPE_LABEL: Record<string, string> = {
 
 interface SubscriptionRecord {
   period: string
+  amount?: number | string | null
   paidAt: string
   orderNo: string
 }
@@ -233,12 +234,9 @@ export default function AppUserManagement() {
                     {row.subscriptionExpireAt ? formatDateTime(row.subscriptionExpireAt) : "-"}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <button
-                      onClick={() => openDetail(row)}
-                      className="text-[12.5px] font-medium text-[#38c08f] transition-colors hover:text-[#2da87a]"
-                    >
-                      详情
-                    </button>
+                    <ActionButton onClick={() => openDetail(row)}>
+                      查看详情
+                    </ActionButton>
                   </td>
                 </tr>
               ))}
@@ -324,8 +322,8 @@ function UserDetailDrawer({
           userId={user.id}
           columns={["订阅周期", "订阅金额", "时间", "关联订单号"]}
           monoCols={[3]}
-          fetcher={(params) => appUserApi.subscriptions(user.id, params)}
-          mapRow={(s: any) => [
+          fetcher={(params) => appUserApi.subscriptions<SubscriptionRecord>(user.id, params)}
+          mapRow={(s: SubscriptionRecord) => [
             PERIOD_LABEL[s.period] || s.period,
             s.amount != null ? String(s.amount) : "-",
             formatDateTime(s.paidAt),
@@ -369,8 +367,8 @@ function UserDetailDrawer({
           key="watch"
           userId={user.id}
           columns={["剧集名称", "集数", "解锁方式", "时间"]}
-          fetcher={(params) => appUserApi.watchLogs(user.id, params)}
-          mapRow={(w: any) => [
+          fetcher={(params) => appUserApi.watchLogs<WatchRecord>(user.id, params)}
+          mapRow={(w: WatchRecord) => [
             w.dramaName || "-",
             `第${w.episodeNo}集`,
             UNLOCK_TYPE_LABEL[w.unlockType] || w.unlockType || "-",
@@ -383,7 +381,7 @@ function UserDetailDrawer({
 }
 
 // ─────────────── Detail Tab（自带分页的记录列表）───────────────
-function DetailTab({
+function DetailTab<T>({
   userId,
   columns,
   monoCols = [],
@@ -393,35 +391,29 @@ function DetailTab({
   userId: number
   columns: string[]
   monoCols?: number[]
-  fetcher: (params: any) => Promise<{ list?: any[]; total?: number }>
-  mapRow: (item: any) => string[]
+  fetcher: (params: { page: number; pageSize: number }) => Promise<{ list?: T[]; total?: number }>
+  mapRow: (item: T) => string[]
 }) {
-  const { pageSize, resetPage, paginationProps } = usePagination()
-  const { currentPage } = paginationProps
-  const [rows, setRows] = useState<string[][]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const { page, pageSize, resetPage, paginationProps } = usePagination()
 
-  // 用户切换时重置到第一页
   useEffect(() => { resetPage() }, [userId, resetPage])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetcher({ page: currentPage, pageSize })
-      setRows((res.list || []).map(mapRow))
-      setTotal(res.total ?? 0)
-    } catch {
-      setRows([])
-      setTotal(0)
-      toast.error("加载失败")
-    } finally {
-      setLoading(false)
+  const queryFetcher = useCallback(async ({ page: queryPage, pageSize: queryPageSize }: { page: number; pageSize: number }) => {
+    const res = await fetcher({ page: queryPage, pageSize: queryPageSize })
+    return {
+      list: (res.list || []).map(mapRow),
+      total: res.total ?? 0,
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, currentPage, pageSize])
+  }, [fetcher, mapRow])
+  const { data: rows, total, loading, error } = usePagedQuery<string[]>({
+    page,
+    pageSize,
+    fetcher: queryFetcher,
+  })
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (error) toast.error("加载失败")
+  }, [error])
 
   return (
     <>

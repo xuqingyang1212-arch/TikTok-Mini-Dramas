@@ -34,7 +34,8 @@ admin-Base/
 ├── lib/
 │   ├── menu-registry.tsx   # 菜单、页面和前端权限单一真相源
 │   ├── api-client.ts       # Token、请求、响应和错误处理
-│   ├── api.ts              # 按领域组织的接口方法
+│   ├── api.ts              # 兼容性公共 barrel，保持 @/lib/api 导入稳定
+│   ├── api/                # 按稳定业务领域拆分的接口与 wire DTO
 │   ├── format.ts           # UTC 时间和展示格式
 │   ├── permissions.ts      # 从注册表派生的权限结构
 │   └── types.ts            # 跨页面共享类型
@@ -48,7 +49,7 @@ admin-Base/
 app/layout → menu registry → business components
 business components → hooks/shared/lib
 hooks → lib
-api.ts → api-client.ts
+api.ts → api/* → api-client.ts
 ```
 
 `lib` 和共享组件不得反向依赖具体业务页面。
@@ -72,7 +73,7 @@ api.ts → api-client.ts
 
 禁止再到布局、侧边栏和内容分发组件中分别维护相同页面配置。
 
-前端按钮隐藏不是授权机制。新增、编辑、删除、导出等敏感操作必须有服务端权限校验。
+权限树只声明已有页面或接口能够执行的真实操作；不得为尚不存在的整剧删除、小程序用户编辑或资产配置能力预留无效权限。前端按钮隐藏不是授权机制。新增、编辑、删除、导出等敏感操作必须有服务端权限校验。
 
 ## 4. API 访问规范
 
@@ -91,7 +92,7 @@ api.ts → api-client.ts
 
 ### 4.2 领域 API
 
-接口方法集中在 [lib/api.ts](./lib/api.ts)，按应用、短剧、用户、订单、订阅等领域组织。页面只调用语义化方法，不拼接接口路径。
+接口方法在 [lib/api/](./lib/api/) 内按应用、短剧、用户、订单、订阅等稳定业务领域组织。[lib/api.ts](./lib/api.ts) 是兼容性公共 barrel，必须持续导出既有服务和类型，使页面统一从 `@/lib/api` 调用语义化方法，而不拼接接口路径。禁止绕过 barrel 创建第二套公共入口。
 
 新增或修改接口时必须：
 
@@ -126,11 +127,7 @@ api.ts → api-client.ts
 
 ### 5.2 分页与筛选
 
-列表页面优先使用：
-
-- [hooks/use-paged-query.ts](./hooks/use-paged-query.ts)：请求、分页、刷新、加载和错误状态。
-- [hooks/use-filters.ts](./hooks/use-filters.ts)：筛选草稿与已应用条件。
-- [hooks/use-pagination.ts](./hooks/use-pagination.ts)：只需要分页状态时使用。
+所有活跃分页列表（包括详情 Tab 内的记录列表）使用唯一请求实现 [hooks/use-paged-query.ts](./hooks/use-paged-query.ts)，统一请求、刷新、加载、错误和过期响应抑制。筛选草稿与已应用条件使用 [hooks/use-filters.ts](./hooks/use-filters.ts)；[hooks/use-pagination.ts](./hooks/use-pagination.ts) 仅提供页码状态和视图属性，不得作为另一套列表请求实现。
 
 规则：
 
@@ -155,11 +152,12 @@ api.ts → api-client.ts
 
 - `popconfirm`：危险操作确认。
 - `right-drawer`：详情和编辑抽屉。
+- `action-button`：列表操作按钮和详情复制按钮（`ActionButton`、`CopyButton`）。
 - `fixed-header-table`：固定表头表格。
 - `filter-bar`、`filter-input`、`select-filter`：筛选区域。
 - `date-range-picker`：运营日期范围。
 - `form-input`、`form-select`、`field-error`：表单和字段错误。
-- `status-badge`：状态展示。
+- `status-badge`、`monetization-badge`：状态和变现模式展示。
 - `column-settings`：列配置。
 
 新增组件前先判断是否为通用能力：
@@ -170,6 +168,28 @@ api.ts → api-client.ts
 
 ## 7. 业务展示规范
 
+### 列表操作按钮
+
+- 列表页创建入口统一命名为“新建**”，例如“新建用户”“新建剧集”。
+- 新建按钮只显示文字，不添加 `+` 字符或加号图标。
+- 应用选项同时展示变现模式时，使用 `MonetizationBadge`，不使用名称后的括号纯文本。
+- 详情抽屉中的可复制业务信息统一使用 `CopyButton`；按钮显示复制图标和“复制”文字，不按 JSON、链接等内容类型改变文案，除非同一区域存在多个复制动作且必须消歧。长链接必须单行缩略展示、通过按钮完整复制原值，不依赖用户手动选择文本，操作结果通过 toast 反馈。
+- 列表“操作”列统一使用 `ActionButton`：查看、详情、编辑、上架等常规操作使用绿色描边样式，删除、下架等破坏性操作使用红色描边样式；同一行多个操作按钮保持一致的高度、圆角、字号与间距，禁止页面自行使用纯文字链接或另一套按钮样式。
+- IAA/IAP 在列表、筛选选项和详情中的展示统一使用 `MonetizationBadge`，包括应用管理页面的“变现类型”列。
+
+### 详情抽屉
+
+- 抽屉总标题栏由 `RightDrawer` 提供唯一的主分隔线；内容区的区块标题和普通字段行默认不添加横向分隔线，使用字号、字重和间距建立视觉层级。
+- 抽屉标题只显示当前主体的名称，不并列堆叠总集数、卡点集数等可在正文中呈现的统计或业务信息。
+- 区块只有一个字段且区块标题与字段名相同时，只保留区块标题并直接展示字段值，禁止重复显示同名字段标签。
+- 同级字段名及区块标题必须使用一致的字号和字重，不使用明显偏小的标签破坏信息层级。
+
+### 业务列表
+
+- 推广链接列表展示“卡点集数”和“单集 Beans 价格”，IAA 的 Beans 价格显示为 `-`。导出使用已应用的筛选条件，并将小程序名称/变现类型、剧集名称/剧集 ID 分列。
+- 列表导出统一使用 `ExportButton` 和 `api-client.downloadFile`；固定列页面传完整 `columns` 顺序，自定义列页面传当前可见列顺序，后端按白名单生成表头和值。广告会话属于固定列页面，列表与导出字段顺序必须一致，并在最后一列显示业务会话 ID（`sessionNo`）。
+- “推广管理 / 媒体事件”属于固定列页面，列表统一展示用户ID、小程序（名称和变现类型徽章）、Linkid、剧集（名称和 ID）、集数、事件名称、上报状态、上报时间和原始参数，不展示仅用于幂等的 `reportId`。小程序筛选选项同步展示变现类型徽章；剧集筛选与推广链接一致：纯数字按完整剧集 ID 精准匹配，非纯数字按剧集名称模糊匹配；事件名称采用完整名称文本精准筛选，上报状态采用固定枚举下拉筛选，上报时间采用后台展示时区的日期范围筛选。导出必须复用已应用的筛选条件，并将小程序名称和变现类型、剧集名称和剧集 ID 分列，同时导出上报时间；详情抽屉分别展示 SDK 原始参数与 SDK 上报结果；导出时两者分别成列，使用两空格缩进的多行 JSON；JSON 单元格不自动换行并固定数据行高度，选中单元格后可查看完整内容。
+
 ### 用户权益记录
 
 用户详情必须区分业务来源：
@@ -179,6 +199,11 @@ api.ts → api-client.ts
 - 会员记录、观看记录保持独立分页。
 
 禁止在 Beans 页面显示广告会话号，或使用“关联凭证”等含义不清的字段名。
+
+### 单集维护
+
+- 上架和下架剧集都可以追加、替换单集。
+- 删除单集必须先下架剧集，且只能从最后一集开始删除；前端提示不能替代服务端校验。
 
 ### IAA/IAP 配置
 

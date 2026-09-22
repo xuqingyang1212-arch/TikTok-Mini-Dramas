@@ -42,7 +42,14 @@ export interface Subscription {
 export interface LoginResult {
   userId: string
   isNew: boolean
+  currentPromotionLinkId: string | null
   subscription?: Subscription
+}
+
+export interface UserActivationResult {
+  userId: string
+  currentPromotionLinkId: string | null
+  attributionUpdated: boolean
 }
 
 export interface UserInfo {
@@ -50,6 +57,7 @@ export interface UserInfo {
   openId: string
   appName: string
   clientKey: string
+  currentPromotionLinkId: string | null
   createdAt: string
   subscription?: Subscription
 }
@@ -88,6 +96,7 @@ export interface WatchReportResult {
 export interface AdUnlockSession {
   sessionNo: string
   status: "pending" | "already_unlocked" | "completed" | "canceled" | "expired"
+  attributionLinkId: string | null
   dramaId: string
   episodeNo: number
   adPlacementId: string
@@ -124,6 +133,7 @@ export interface SubscriptionPlan {
 
 export interface PaywallData {
   dramaId: string
+  currentPromotionLinkId: string | null
   totalEpisodes: number
   paywallEpisode: number
   beansPerEp: number
@@ -138,6 +148,7 @@ export interface UnlockOrder {
   orderNo: string
   orderType: "unlock"
   payStatus: "pending" | "paid" | "failed"
+  attributionLinkId: string | null
   beansCost: number
   episodes: number[]
 }
@@ -146,6 +157,7 @@ export interface SubscriptionOrder {
   orderNo: string
   orderType: "subscription"
   payStatus: "pending" | "paid" | "failed"
+  attributionLinkId: string | null
 }
 
 export interface PayResultResponse {

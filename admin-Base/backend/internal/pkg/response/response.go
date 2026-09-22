@@ -151,6 +151,10 @@ func FailForbidden(c *gin.Context, msg string) {
 	c.JSON(http.StatusForbidden, R{Code: 403, Message: msg})
 }
 
+func FailConflict(c *gin.Context, msg string) {
+	c.JSON(http.StatusConflict, R{Code: 409, Message: msg})
+}
+
 func FailNotFound(c *gin.Context, msg string) {
 	c.JSON(http.StatusNotFound, R{Code: 404, Message: msg})
 }

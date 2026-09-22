@@ -7,6 +7,7 @@ export interface PagedQueryResult<T> {
 
 export interface UsePagedQueryOptions<T, F = void> {
   enabled?: boolean
+  preserveDataOnError?: boolean
   page: number
   pageSize: number
   filters?: F
@@ -15,6 +16,7 @@ export interface UsePagedQueryOptions<T, F = void> {
 
 export function usePagedQuery<T, F = void>({
   enabled = true,
+  preserveDataOnError = false,
   page,
   pageSize,
   filters,
@@ -39,15 +41,17 @@ export function usePagedQuery<T, F = void>({
     } catch (err) {
       if (requestId !== requestIdRef.current) return
       const message = err instanceof Error ? err.message : "加载失败"
-      setData([])
-      setTotal(0)
+      if (!preserveDataOnError) {
+        setData([])
+        setTotal(0)
+      }
       setError(message)
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false)
       }
     }
-  }, [page, pageSize, filters, fetcher])
+  }, [page, pageSize, filters, fetcher, preserveDataOnError])
 
   useEffect(() => {
     if (!enabled) return

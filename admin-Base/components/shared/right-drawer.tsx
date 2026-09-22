@@ -23,6 +23,11 @@ export function RightDrawer({
   children,
 }: RightDrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
@@ -31,7 +36,7 @@ export function RightDrawer({
     document.body.style.overflow = "hidden"
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
+      if (event.key === "Escape") onCloseRef.current()
     }
 
     const previousActiveElement = document.activeElement as HTMLElement | null
@@ -43,7 +48,7 @@ export function RightDrawer({
       document.removeEventListener("keydown", handleKeyDown)
       previousActiveElement?.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

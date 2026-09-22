@@ -70,7 +70,7 @@ Handler 只负责：
 
 ### 3.2 Service 层
 
-每个领域使用独立 Service 接口和实现，并由 `service.New` 统一注入。Service 负责：
+每个领域使用独立 Service 接口和实现，并由 `service.New` 统一创建。`cmd/server` 将 Services 与数据库显式传入 `handler.Application` 和需要数据库的 Middleware；禁止恢复 `handler.Svc`、`model.DB` 等包级运行时全局依赖。Service 负责：
 
 - 业务规则和状态机。
 - 跨表查询、聚合和投影。
@@ -80,6 +80,8 @@ Handler 只负责：
 复杂领域应按职责拆文件，而不是持续扩大单个文件。例如支付拆分为 Beans 订单、订阅订单、支付墙、权益和支付记录；用户查询拆分为订阅、解锁和观看记录。
 
 ### 3.3 Model 层
+
+数据库启动固定分为 `model.Open`、`model.MigrateSchema`、`model.SetupCurrentData` 三个显式阶段：连接与连接池、当前 Schema、当前版本必需数据互不混杂。旧版本专用迁移和破坏性回填不得重新塞入启动流程。
 
 Model 是当前演示环境的数据库 Schema 单一真相源：
 
@@ -179,7 +181,7 @@ Beans 解锁订单必须记录实际 `currentEpisode` 及订单包含的集数�
 - 广告会话完成，同时创建永久权益。
 - 任何“业务状态 + 衍生记录”必须原子变化的流程。
 
-同一短剧的集数结构变更需锁定 Drama 行，避免并发导致计数漂移。外部副作用（例如删除媒体文件）应在数据库事务成功后执行。
+同一短剧的集数结构变更需锁定 Drama 行，避免并发导致计数漂移。单集更新和删除必须同时校验 URL 中的剧集 ID 与单集归属；追加和替换不受剧集上下架状态限制，删除则必须先下架剧集且只能从最后一集开始。外部副作用（例如删除媒体文件）应在数据库事务成功后执行。
 
 ### 5.2 唯一约束
 
@@ -194,7 +196,41 @@ Beans 解锁订单必须记录实际 `currentEpisode` 及订单包含的集数�
 
 新增唯一约束前必须检查历史重复数据并提供兼容或回填策略。
 
-### 5.3 错误处理
+### 5.3 推广末次归因
+
+- `app_users.current_promotion_link_id` 保存用户当前生效的末次推广 Linkid。
+- 小程序根布局仅在任意页面被外部直接打开或浏览器刷新时上报入口参数；客户端内部路由跳转不得重复上报。URL 中存在小驼峰 `linkId` 时调用独立的 `POST /api/mini/users/activate`，无 Linkid 的自然入口不改变当前归因。
+- 激活上报接口只维护归因，不返回目标剧集、不控制页面导航；登录仍只负责建立或恢复身份。接口必须锁定用户行，并在同一事务内完成当前 Linkid 更新与 `promotion_attribution_histories` 历史插入。
+- 用户首次关联或切换到不同 Linkid 时写入一条历史；重复进入相同 Linkid 不更新用户，也不重复写历史。
+- 历史记录保留变更前 Linkid（首次为空）和变更后 Linkid，作为不可变归因事实。
+- 登录和用户详情响应必须返回服务端当前 Linkid；无归因时明确返回 `null`，供非推广入口恢复当前关联。
+- 支付订单和广告解锁会话创建时从服务端用户记录保存归因 Linkid 快照；前端不在这些业务请求中传入可信 Linkid。后续支付结果和广告终态沿用创建时快照，不按用户最新归因改写；复用 pending 广告会话时也保留原快照。
+
+### 5.4 媒体事件上报留档
+
+- TikTok 媒体事件由小程序通过 SDK 直接上报；服务端不调用 SDK、不转发、不补发，只接收 SDK 最终回调结果用于媒体核对。
+- 小程序在 SDK 回调后写一次结果；客户端不支持 `reportEvent` 时以 `unsupported` 终态写一次。状态固定为 `success`、`failed`、`unsupported`。
+- `userId` 对应用户的 `app_id` 和当前归因 Linkid 由服务端读取并保存请求时快照；客户端不得传入可信 `appId` 或 `linkId`。剧集、集数、事件名、SDK 参数和完整回调结果由客户端提供并校验。
+- `media_event_reports` 使用 `(app_id, report_id)` 联合唯一约束兜底幂等。相同 `reportId` 和相同内容重试返回原记录，不重复落库；同一 ID 对应不同内容必须返回冲突。
+- `params_json` 和 `result_json` 使用 MySQL JSON 保存，均只接受 JSON 对象并限制大小；接口请求体也必须限制大小。事件名只校验稳定格式，不采用固定白名单阻断媒体新增事件。
+- 媒体事件日志是审计事实，不参与支付、广告解锁或权益状态流转。
+- 管理后台通过 `GET /api/v1/media-event-reports` 查询，通过 `GET /api/v1/media-event-reports/export` 按相同筛选条件导出；权限分别为 `campaign.media-event.list` 和 `campaign.media-event.export`。
+- 后台筛选支持用户ID、Linkid、小程序、剧集、事件名称、状态和上报时间。上报时间使用记录的 `created_at`，以中国运营时区的自然日解析为 UTC 半开区间查询；DTO 统一输出 UTC，前端和导出再按后台展示时区格式化。剧集筛选与推广链接保持一致：纯数字按完整剧集 ID 精准匹配，非纯数字按剧集名称模糊匹配；列表 DTO 同时返回 `monetizationType`、`dramaName`、`dramaId` 和 `reportedAt`，导出时将小程序名称与变现类型、剧集名称与剧集 ID 分列并包含上报时间。`reportId` 仅用于接口幂等，不属于运营展示或导出字段；`params_json` 和 `result_json` 都在后台响应边界解码为 JSON 对象，分别展示为 SDK 原始参数和 SDK 上报结果。导出时两者分别成列，编码为两空格缩进的多行 JSON；JSON 单元格不自动换行，并固定数据行高度，用户可选中单元格查看完整内容。
+
+### 5.5 流式导出
+
+- XLSX 导出统一使用 `internal/pkg/xlsxstream`，业务 Handler 只声明表头、样式、列宽和行映射，禁止自行创建 Workbook。
+- 导出数据源必须在 Service 中按稳定排序分批迭代，默认每批 500 条；禁止为了导出一次性加载全部匹配记录。
+- 列名、顺序、筛选、文件名、MIME type 和字段格式属于现有接口契约，重构不得改变。
+- 多行 JSON 等特殊展示由业务 Handler 通过助手配置，但不得复制流式写入生命周期。
+
+### 5.6 后台会话
+
+- 管理员 Session 必须在每次受保护请求中同时校验 Token 和账号启用状态。
+- 管理员被禁用时，更新状态与清空 `session_token` 必须在同一事务内完成；当前禁用请求可以成功，后续请求统一返回 401，由管理后台清除本地 Token 并返回登录页。
+- `consts.PermissionTree` 是有效权限白名单；启动同步必须清理所有角色中已从权限树移除的权限 key，再补齐超级管理员的当前权限。
+
+### 5.7 错误处理
 
 - 只有 `gorm.ErrRecordNotFound` 可以进入“未找到”或配置回退路径。
 - SQL、连接和关联查询错误必须向上传播。
@@ -232,6 +268,17 @@ Beans 解锁订单必须记录实际 `currentEpisode` 及订单包含的集数�
 - 分页接口保持统一的 `total + list` 结构。
 - 列表筛选必须在数据库分页之前完成。
 - 同一业务概念必须使用一致命名，例如 `orderNo`、`sessionNo`、`unlockType`。
+
+### 推广链接与激活
+
+- `promotion_links.link_id` 同时是主键和业务 Linkid，由 MySQL 自增生成，首个值为 `10000001`；禁止使用 `MAX + 1`。
+- 推广关系和目标剧集由服务端管理。后台创建接口接受应用、剧集、付费卡点、可选名称，以及 IAP 应用必填的单集 Beans 价格；创建人来自 JWT，应用必须启用，剧集必须上架。
+- `promotion_links.paywall_episode` 是所有推广链接的创建时运营配置快照；`promotion_links.beans_per_ep` 仅用于 IAP，IAA 必须保存为 `NULL`。创建服务必须按实际剧集总集数校验卡点为 `1..episode_count`；IAP 单集价格必须存在且为 `10..500`。
+- 当前用户存在有效归因 Linkid 时，服务端集中解析推广运营配置：IAP 的 `beans_per_ep` 对用户观看的所有剧集生效；仅当当前剧集等于推广链接关联剧集时，`paywall_episode` 覆盖剧集默认卡点，其他剧集保留默认卡点。逐集权益、付费面板、Beans 建单和广告会话必须复用同一规则，前端不得自行计算。不存在、跨应用或已失效的 Linkid 按无推广配置回退，其他数据库错误必须向上传播。
+- 后台推广链接列表与导出复用同一套数据库筛选规则；列表在筛选后分页，导出则返回全部匹配记录，并通过独立的 `campaign.link.export` 权限保护。
+- 后台广告会话通过 `/api/v1/ad-sessions` 查询、`/api/v1/ad-sessions/export` 导出；用户 ID、Linkid、应用、剧集 ID、状态和中国运营日期区间使用同一套筛选，列表分页、导出全部匹配记录。列表和导出末列均返回广告业务会话编号 `sessionNo`（数据库 `session_no`），而非数据库主键。导出列由 `columns` 白名单控制，并分别由 `finance.ad-session.list`、`finance.ad-session.export` 保护。
+- 推广链接直接指向配置的移动端播放页，固定格式为 `/player?dramaId={dramaId}&linkId={linkId}`；省略 `episode` 由播放器默认进入第一集，不再经过后端 302 中转。
+- 小程序取得用户身份后，以 `userId + linkId` 调用 `/api/mini/users/activate`。Linkid 缺失或为空时保持当前归因并返回 `attributionUpdated=false`；服务端仅在 Linkid 非空时校验推广链接与用户属于同一应用。
 
 ## 8. 新功能开发流程
 

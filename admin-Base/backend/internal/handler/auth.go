@@ -26,7 +26,7 @@ type LoginReq struct {
 	Email string `json:"email" binding:"required"`
 }
 
-func AuthLogin(c *gin.Context) {
+func (a *Application) AuthLogin(c *gin.Context) {
 	var req LoginReq
 	if !BindOrFail(c, &req) {
 		return
@@ -39,7 +39,7 @@ func AuthLogin(c *gin.Context) {
 	}
 
 	var user model.User
-	err := model.DB.Where("email = ?", email).First(&user).Error
+	err := a.db.Where("email = ?", email).First(&user).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// 新用户：自动注册
@@ -48,18 +48,23 @@ func AuthLogin(c *gin.Context) {
 			Email:  email,
 			Status: consts.UserStatusActive,
 		}
-		if err := model.DB.Create(&user).Error; err != nil {
+		if err := a.db.Create(&user).Error; err != nil {
 			response.FailServer(c, "创建用户失败")
 			return
 		}
 
 		// 分配超级管理员角色
 		var superAdminRole model.Role
-		if err := model.DB.Where("name = ?", "超级管理员").First(&superAdminRole).Error; err == nil {
-			model.DB.Create(&model.UserRole{
-				UserID: user.ID,
-				RoleID: superAdminRole.ID,
-			})
+		if err := a.db.Where("name = ?", "超级管理员").First(&superAdminRole).Error; err != nil {
+			response.FailServer(c, "查询角色失败")
+			return
+		}
+		if err := a.db.Create(&model.UserRole{
+			UserID: user.ID,
+			RoleID: superAdminRole.ID,
+		}).Error; err != nil {
+			response.FailServer(c, "分配角色失败")
+			return
 		}
 	} else if err != nil {
 		response.FailServer(c, "查询用户失败")
@@ -72,7 +77,10 @@ func AuthLogin(c *gin.Context) {
 	}
 
 	sessionToken := middleware.GenerateSessionToken()
-	model.DB.Model(&user).Update("session_token", sessionToken)
+	if err := a.db.Model(&user).Update("session_token", sessionToken).Error; err != nil {
+		response.FailServer(c, "更新会话失败")
+		return
+	}
 
 	token, err := middleware.GenerateToken(user.ID, user.Name, sessionToken)
 	if err != nil {
@@ -97,10 +105,10 @@ func extractNameFromEmail(email string) string {
 
 // ─── Current User ────────────────────────────────────────────────────────────
 
-func GetCurrentUser(c *gin.Context) {
+func (a *Application) GetCurrentUser(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var user model.User
-	if err := model.DB.Preload("Roles").First(&user, userID).Error; err != nil {
+	if err := a.db.Preload("Roles").First(&user, userID).Error; err != nil {
 		response.FailNotFound(c, "用户不存在")
 		return
 	}

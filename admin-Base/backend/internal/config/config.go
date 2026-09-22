@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	JWT      JWTConfig      `yaml:"jwt"`
-	Demo     DemoConfig     `yaml:"demo"`
-	Storage  StorageConfig  `yaml:"storage"`
+	Server    ServerConfig    `yaml:"server"`
+	Database  DatabaseConfig  `yaml:"database"`
+	JWT       JWTConfig       `yaml:"jwt"`
+	Demo      DemoConfig      `yaml:"demo"`
+	Promotion PromotionConfig `yaml:"promotion"`
+	Storage   StorageConfig   `yaml:"storage"`
 }
 
 type ServerConfig struct {
@@ -45,6 +46,10 @@ type DemoConfig struct {
 	AutoLogin       bool   `yaml:"auto_login"`
 	AutoPayment     bool   `yaml:"auto_payment"`
 	FixedVerifyCode string `yaml:"fixed_verify_code"`
+}
+
+type PromotionConfig struct {
+	MobileBaseURL string `yaml:"mobile_base_url"`
 }
 
 // StorageConfig 文件存储配置
@@ -153,5 +158,9 @@ func applyEnvOverrides(c *Config) {
 	// Demo
 	if v := os.Getenv("DEMO_ENABLED"); v == "false" {
 		c.Demo.Enabled = false
+	}
+
+	if v := os.Getenv("PROMOTION_MOBILE_BASE_URL"); v != "" {
+		c.Promotion.MobileBaseURL = v
 	}
 }

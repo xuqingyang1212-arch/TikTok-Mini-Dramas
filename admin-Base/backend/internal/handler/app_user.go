@@ -11,7 +11,7 @@ import (
 
 // ─── List App Users ─────────────────────────────────────────────────────────
 
-func ListAppUsers(c *gin.Context) {
+func (a *Application) ListAppUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	appID, _ := strconv.ParseInt(c.Query("appId"), 10, 64)
@@ -30,7 +30,7 @@ func ListAppUsers(c *gin.Context) {
 		PageSize:           pageSize,
 	}
 
-	list, total, err := Svc.AppUser.List(filter)
+	list, total, err := a.services.AppUser.List(filter)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -40,13 +40,13 @@ func ListAppUsers(c *gin.Context) {
 
 // ─── Get App User ───────────────────────────────────────────────────────────
 
-func GetAppUser(c *gin.Context) {
+func (a *Application) GetAppUser(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	user, err := Svc.AppUser.GetByID(id)
+	user, err := a.services.AppUser.GetByID(id)
 	if err == service.ErrAppUserNotFound {
 		response.FailNotFound(c, "用户不存在")
 		return
@@ -60,13 +60,13 @@ func GetAppUser(c *gin.Context) {
 
 // ─── Get App User Detail (用户详情弹窗) ──────────────────────────────────────
 
-func GetAppUserDetail(c *gin.Context) {
+func (a *Application) GetAppUserDetail(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 
-	detail, err := Svc.AppUser.Detail(id)
+	detail, err := a.services.AppUser.Detail(id)
 	if err == service.ErrAppUserNotFound {
 		response.FailNotFound(c, "用户不存在")
 		return
@@ -80,14 +80,14 @@ func GetAppUserDetail(c *gin.Context) {
 
 // ─── App User Detail Sub-lists (分页) ────────────────────────────────────────
 
-func GetAppUserSubscriptions(c *gin.Context) {
+func (a *Application) GetAppUserSubscriptions(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	list, total, err := Svc.AppUser.Subscriptions(id, page, pageSize)
+	list, total, err := a.services.AppUser.Subscriptions(id, page, pageSize)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -95,7 +95,7 @@ func GetAppUserSubscriptions(c *gin.Context) {
 	response.OKPage(c, total, list)
 }
 
-func GetAppUserUnlocks(c *gin.Context) {
+func (a *Application) GetAppUserUnlocks(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
@@ -107,7 +107,7 @@ func GetAppUserUnlocks(c *gin.Context) {
 		response.FailBadRequest(c, "解锁类型无效")
 		return
 	}
-	list, total, err := Svc.AppUser.Unlocks(id, unlockType, page, pageSize)
+	list, total, err := a.services.AppUser.Unlocks(id, unlockType, page, pageSize)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
@@ -115,14 +115,14 @@ func GetAppUserUnlocks(c *gin.Context) {
 	response.OKPage(c, total, list)
 }
 
-func GetAppUserWatchLogs(c *gin.Context) {
+func (a *Application) GetAppUserWatchLogs(c *gin.Context) {
 	id, ok := ParseID(c, "id")
 	if !ok {
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	list, total, err := Svc.AppUser.WatchLogs(id, page, pageSize)
+	list, total, err := a.services.AppUser.WatchLogs(id, page, pageSize)
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return

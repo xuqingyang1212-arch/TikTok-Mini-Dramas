@@ -56,3 +56,20 @@ func RequirePerm(permKey string) gin.HandlerFunc {
 		}
 	}
 }
+
+func RequireAnyPerm(permKeys ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, ok := getPermList(c); !ok {
+			response.FailForbidden(c, "无权限信息")
+			c.Abort()
+			return
+		}
+		for _, permKey := range permKeys {
+			if HasPerm(c, permKey) {
+				return
+			}
+		}
+		response.FailForbidden(c, "无操作权限")
+		c.Abort()
+	}
+}
