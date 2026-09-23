@@ -8,7 +8,7 @@ export const rechargeOrderApi = {
   list: <T = RechargeOrderItem>(params?: UserListQueryParams) => get<PageData<T>>("/recharge-orders", params),
   export: (params?: UserListQueryParams) => downloadFile("/recharge-orders/export", params, "recharge-orders.xlsx"),
 }
-export interface AdSessionItem { id: string; sessionNo: string; userId: string; attributionLinkId: string | null; appId: string; appName: string; dramaId: string; episodeNo: number; status: "pending" | "completed" | "canceled" | "expired"; createdAt: string; completedAt?: string }
+export interface AdSessionItem { id: string; sessionNo: string; userId: string; attributionLinkId: string | null; appId: string; appName: string; dramaId: string; dramaName: string; episodeNo: number; status: "pending" | "completed" | "canceled" | "expired"; createdAt: string; completedAt?: string }
 export const adSessionApi = {
   list: (params?: UserListQueryParams) => get<PageData<AdSessionItem>>("/ad-sessions", params),
   export: (params?: UserListQueryParams) => downloadFile("/ad-sessions/export", params, "ad-sessions.xlsx"),

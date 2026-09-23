@@ -85,7 +85,7 @@ func adSessionColumnLabel(column string) string {
 	case "appName":
 		return "小程序"
 	case "dramaId":
-		return "剧集ID"
+		return "剧集"
 	case "episodeNo":
 		return "集数"
 	case "status":
@@ -128,6 +128,9 @@ func adSessionColumnValue(column string, item service.AdSessionItem) interface{}
 	case "appName":
 		return item.AppName
 	case "dramaId":
+		if item.DramaName != "" {
+			return item.DramaName
+		}
 		return item.DramaID
 	case "episodeNo":
 		return item.EpisodeNo

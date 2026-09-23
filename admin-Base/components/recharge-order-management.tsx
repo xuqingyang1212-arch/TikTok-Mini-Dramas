@@ -135,10 +135,15 @@ const ALL_COLUMNS: OrderColumn[] = [
     render: (r) => <span className="text-[#374151]">{orderTypeLabel[r.orderType] || r.orderType}</span>,
   },
   {
-    key: "drama", label: "充值剧集",
+    key: "drama", label: "剧集",
     render: (r) =>
       r.dramaName || r.dramaId ? (
-        <span className="text-[#111827]">{r.dramaName || r.dramaId}</span>
+        <div className="flex items-center gap-2 text-[#4b5563]">
+          <span>{r.dramaName || r.dramaId}</span>
+          {r.dramaName && r.dramaId && (
+            <span className="font-mono text-[11.5px] text-[#9ca3af]">ID: {r.dramaId}</span>
+          )}
+        </div>
       ) : mutedDash,
   },
   {
@@ -265,7 +270,7 @@ export default function RechargeOrderManagement() {
         <FilterInput block label="Linkid" placeholder="请输入 Linkid" value={draftFilters.linkId} onChange={(v) => updateDraft("linkId", v)} />
         <SelectFilter block label="小程序" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} options={appOptions} placeholder="全部" />
         <SelectFilter block label="订单类型" value={draftFilters.orderType} onChange={(v) => updateDraft("orderType", v)} options={orderTypeOptions} placeholder="全部" />
-        <FilterInput block label="充值剧集" placeholder="请输入剧集ID或名称" value={draftFilters.dramaId} onChange={(v) => updateDraft("dramaId", v)} />
+        <FilterInput block label="剧集" placeholder="请输入剧集ID或名称" value={draftFilters.dramaId} onChange={(v) => updateDraft("dramaId", v)} />
         <SelectFilter block label="设备系统" value={draftFilters.deviceOs} onChange={(v) => updateDraft("deviceOs", v)} options={deviceOsOptions} placeholder="全部" />
         <SelectFilter block label="支付状态" value={draftFilters.payStatus} onChange={(v) => updateDraft("payStatus", v)} options={payStatusOptions} placeholder="全部" />
         <DateRangePicker block label="创建时间" value={draftFilters.createdAtRange} onChange={(v) => updateDraft("createdAtRange", v)} />
