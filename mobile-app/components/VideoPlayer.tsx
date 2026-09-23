@@ -455,112 +455,85 @@ export function VideoPlayer({
         onTouchEnd={handleTouchEnd}
         onClick={handleScreenTap}
       >
-        {/* Previous episode (above) */}
-        {prevEpisode?.videoUrl && translateY < 0 && (
-          <div 
-            className="absolute inset-0"
-            style={{
-              transform: `translateY(${-containerHeight.current + (-translateY)}px)`,
-              transition: isAnimating ? 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none'
-            }}
-          >
-            <video
-              src={getMediaUrl(prevEpisode.videoUrl)}
-              className="h-full w-full object-contain"
-              playsInline
-              muted
-              preload="metadata"
-            />
-          </div>
-        )}
+        {[
+          { data: prevEpisode, offset: -1 },
+          { data: episode, offset: 0 },
+          { data: nextEpisodeData, offset: 1 },
+        ].map(({ data, offset }) => {
+          if (!data?.videoUrl) return null
 
-        {/* Current episode */}
-        <div 
-          className="absolute inset-0"
-          style={{
-            transform: `translateY(${-translateY}px)`,
-            transition: isAnimating ? 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none'
-          }}
-        >
-          {episode.videoUrl && (
-            <video
-              ref={videoRef}
-            key={currentEpisode}
-            src={getMediaUrl(episode.videoUrl)}
-            className="h-full w-full object-contain"
-            playsInline
-            autoPlay={!isCurrentEpisodeLocked}
-            loop={false}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={handleEnded}
-              onPlay={handleVideoPlay}
-              onPause={() => setIsPlaying(false)}
-            />
-          )}
-          
-          {/* Locked overlay */}
-          {isCurrentEpisodeLocked && !showPaywall && !isAdOpen && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-              <Lock size={48} className="mb-3 text-white/50" />
-              <p className="mb-4 text-[15px] text-white/70">
-                {t("player.lockedEpisode", { episode: currentEpisode })}
-              </p>
-              {isIaa && !canUnlockCurrentEpisodeByAd ? (
-                <p className="max-w-xs px-6 text-center text-[14px] leading-6 text-white/50">
-                  {t("player.adUnavailable")}
-                </p>
-              ) : (
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void handleLockedAction()
-                  }}
-                  disabled={rewardedAd.isStarting}
-                  className={cn(
-                    "flex min-h-11 items-center justify-center font-semibold text-white shadow-[0_6px_20px_rgba(255,138,52,0.28)] active:bg-[#f47c24] disabled:opacity-60",
-                    isIaa
-                      ? "mx-6 w-[calc(100%-3rem)] max-w-sm gap-2.5 rounded-xl bg-[#ff8a34] px-4 py-3 text-[15px]"
-                      : "rounded-full bg-[#ff8a34] px-6 py-2.5 text-[14px]",
+          const isCurrent = offset === 0
+          const shouldRender = isCurrent || (offset < 0 ? translateY < 0 : translateY > 0)
+          if (!shouldRender) return null
+
+          return (
+            <div
+              key={data.episodeNo}
+              className="absolute inset-0"
+              style={{
+                transform: `translateY(${offset * containerHeight.current - translateY}px)`,
+                transition: isAnimating ? "transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)" : "none",
+              }}
+            >
+              <video
+                ref={isCurrent ? videoRef : offset > 0 ? nextVideoRef : undefined}
+                src={getMediaUrl(data.videoUrl)}
+                className="h-full w-full object-contain"
+                playsInline
+                muted={!isCurrent}
+                autoPlay={isCurrent && !isCurrentEpisodeLocked}
+                loop={false}
+                preload={offset > 0 ? "auto" : "metadata"}
+                onTimeUpdate={isCurrent ? handleTimeUpdate : undefined}
+                onLoadedMetadata={isCurrent ? handleLoadedMetadata : undefined}
+                onEnded={isCurrent ? handleEnded : undefined}
+                onPlay={isCurrent ? handleVideoPlay : undefined}
+                onPause={isCurrent ? () => setIsPlaying(false) : undefined}
+              />
+
+              {isCurrent && isCurrentEpisodeLocked && !showPaywall && !isAdOpen && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+                  <Lock size={48} className="mb-3 text-white/50" />
+                  <p className="mb-4 text-[15px] text-white/70">
+                    {t("player.lockedEpisode", { episode: currentEpisode })}
+                  </p>
+                  {isIaa && !canUnlockCurrentEpisodeByAd ? (
+                    <p className="max-w-xs px-6 text-center text-[14px] leading-6 text-white/50">
+                      {t("player.adUnavailable")}
+                    </p>
+                  ) : (
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleLockedAction()
+                      }}
+                      disabled={rewardedAd.isStarting}
+                      className={cn(
+                        "flex min-h-11 items-center justify-center font-semibold text-white shadow-[0_6px_20px_rgba(255,138,52,0.28)] active:bg-[#f47c24] disabled:opacity-60",
+                        isIaa
+                          ? "mx-6 w-[calc(100%-3rem)] max-w-sm gap-2.5 rounded-xl bg-[#ff8a34] px-4 py-3 text-[15px]"
+                          : "rounded-full bg-[#ff8a34] px-6 py-2.5 text-[14px]",
+                      )}
+                    >
+                      {rewardedAd.isStarting ? (
+                        <Loader2 size={22} className="animate-spin" />
+                      ) : isIaa ? (
+                        <img
+                          src="/assets/ad-watch-icon.png"
+                          alt=""
+                          aria-hidden="true"
+                          className="h-7 w-7 object-contain"
+                          draggable={false}
+                        />
+                      ) : null}
+                      <span>{t(isIaa ? "player.watchAdToUnlock" : "player.unlockToWatch")}</span>
+                    </button>
                   )}
-                >
-                  {rewardedAd.isStarting ? (
-                    <Loader2 size={22} className="animate-spin" />
-                  ) : isIaa ? (
-                    <img
-                      src="/assets/ad-watch-icon.png"
-                      alt=""
-                      aria-hidden="true"
-                      className="h-7 w-7 object-contain"
-                      draggable={false}
-                    />
-                  ) : null}
-                  <span>{t(isIaa ? "player.watchAdToUnlock" : "player.unlockToWatch")}</span>
-                </button>
+                </div>
               )}
             </div>
-          )}
-        </div>
-
-        {/* Next episode (below) */}
-        {nextEpisodeData?.videoUrl && translateY > 0 && (
-          <div 
-            className="absolute inset-0"
-            style={{
-              transform: `translateY(${containerHeight.current - translateY}px)`,
-              transition: isAnimating ? 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none'
-            }}
-          >
-            <video
-              ref={nextVideoRef}
-              src={getMediaUrl(nextEpisodeData.videoUrl)}
-              className="h-full w-full object-contain"
-              playsInline
-              muted
-              preload="metadata"
-            />
-          </div>
-        )}
+          )
+        })}
       </div>
 
       {/* Top bar - 只显示返回按钮，不显示剧名 */}
