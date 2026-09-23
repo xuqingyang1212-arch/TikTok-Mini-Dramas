@@ -155,7 +155,7 @@ api.ts → api/* → api-client.ts
 - `action-button`：列表操作按钮和详情复制按钮（`ActionButton`、`CopyButton`）。
 - `fixed-header-table`：固定表头表格。
 - `filter-bar`、`filter-input`、`select-filter`：筛选区域。
-- `date-range-picker`：运营日期范围。
+- `date-range-picker`：运营日期范围；弹层默认与触发器左对齐，右侧空间不足时自动切换为右对齐，禁止超出浏览器可视区域。
 - `form-input`、`form-select`、`field-error`：表单和字段错误。
 - `status-badge`、`monetization-badge`：状态和变现模式展示。
 - `column-settings`：列配置。

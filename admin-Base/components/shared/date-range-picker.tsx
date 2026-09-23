@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useLayoutEffect } from "react"
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -89,7 +89,9 @@ export function DateRangePicker({
   const [leftYear, setLeftYear] = useState(today.getFullYear())
   const [leftMonth, setLeftMonth] = useState(today.getMonth() === 0 ? 0 : today.getMonth() - 1)
   const [hoverDate, setHoverDate] = useState("")
+  const [alignRight, setAlignRight] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
 
   const rightYear = leftMonth === 11 ? leftYear + 1 : leftYear
   const rightMonth = leftMonth === 11 ? 0 : leftMonth + 1
@@ -103,6 +105,27 @@ export function DateRangePicker({
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [])
+
+  useLayoutEffect(() => {
+    if (!open) return
+
+    const updateAlignment = () => {
+      const anchor = ref.current
+      const popup = popupRef.current
+      if (!anchor || !popup) return
+
+      const anchorRect = anchor.getBoundingClientRect()
+      const popupWidth = popup.offsetWidth
+      const viewportPadding = 8
+      const overflowsRight = anchorRect.left + popupWidth > window.innerWidth - viewportPadding
+      const fitsWhenRightAligned = anchorRect.right - popupWidth >= viewportPadding
+      setAlignRight(overflowsRight && fitsWhenRightAligned)
+    }
+
+    updateAlignment()
+    window.addEventListener("resize", updateAlignment)
+    return () => window.removeEventListener("resize", updateAlignment)
+  }, [open])
 
   function handleDayClick(d: string) {
     if (!startDate || (startDate && endDate)) {
@@ -158,7 +181,13 @@ export function DateRangePicker({
       <div className={cn("relative", block && "min-w-0 flex-1")} ref={ref}>
         {trigger}
         {open && (
-          <div className="absolute left-0 top-[36px] z-50 flex gap-4 rounded-[8px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-lg">
+          <div
+            ref={popupRef}
+            className={cn(
+              "absolute top-[36px] z-50 flex gap-4 rounded-[8px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-lg",
+              alignRight ? "right-0" : "left-0",
+            )}
+          >
             <div className="flex flex-col">
               <div className="mb-2 flex items-center justify-between">
                 <button onClick={prevMonth} className="flex h-6 w-6 items-center justify-center rounded hover:bg-[#f3f4f6] text-[#6b7280]">
