@@ -29,6 +29,7 @@ type AdSessionItem struct {
 	AppID             string  `json:"appId"`
 	AppName           string  `json:"appName"`
 	DramaID           string  `json:"dramaId"`
+	DramaName         string  `json:"dramaName"`
 	EpisodeNo         int     `json:"episodeNo"`
 	Status            string  `json:"status"`
 	CreatedAt         string  `json:"createdAt"`
@@ -52,6 +53,7 @@ type adSessionRow struct {
 	AppID             int64
 	AppName           string
 	DramaID           int64
+	DramaName         string
 	EpisodeNo         int
 	Status            string
 	CreatedAt         time.Time
@@ -60,7 +62,8 @@ type adSessionRow struct {
 
 func (s *adSessionService) filteredQuery(f AdSessionFilter) *gorm.DB {
 	db := s.db.Table("ad_unlock_sessions AS sessions").
-		Joins("JOIN apps AS apps ON apps.id = sessions.app_id")
+		Joins("JOIN apps AS apps ON apps.id = sessions.app_id").
+		Joins("LEFT JOIN dramas AS dramas ON dramas.id = sessions.drama_id")
 	if f.UserID != "" {
 		db = db.Where("sessions.user_id = ?", f.UserID)
 	}
@@ -71,7 +74,7 @@ func (s *adSessionService) filteredQuery(f AdSessionFilter) *gorm.DB {
 		db = db.Where("sessions.app_id = ?", f.AppID)
 	}
 	if f.DramaID != "" {
-		db = db.Where("sessions.drama_id = ?", f.DramaID)
+		db = db.Where("CAST(sessions.drama_id AS CHAR) = ? OR dramas.name LIKE ?", f.DramaID, "%"+f.DramaID+"%")
 	}
 	if f.Status != "" {
 		db = db.Where("sessions.status = ?", f.Status)
@@ -89,7 +92,7 @@ func selectAdSessionItems(db *gorm.DB) ([]AdSessionItem, error) {
 	var rows []adSessionRow
 	if err := db.Select(`
 		sessions.id, sessions.session_no, sessions.user_id, sessions.attribution_link_id,
-		sessions.app_id, apps.name AS app_name, sessions.drama_id,
+		sessions.app_id, apps.name AS app_name, sessions.drama_id, dramas.name AS drama_name,
 		sessions.episode_no, sessions.status, sessions.created_at, sessions.completed_at
 	`).Order("sessions.created_at DESC, sessions.id DESC").Scan(&rows).Error; err != nil {
 		return nil, err
@@ -104,6 +107,7 @@ func selectAdSessionItems(db *gorm.DB) ([]AdSessionItem, error) {
 			AppID:             strconv.FormatInt(row.AppID, 10),
 			AppName:           row.AppName,
 			DramaID:           strconv.FormatInt(row.DramaID, 10),
+			DramaName:         row.DramaName,
 			EpisodeNo:         row.EpisodeNo,
 			Status:            row.Status,
 			CreatedAt:         datetime.FormatUTC(row.CreatedAt),

@@ -209,7 +209,7 @@ func rechargeColumnLabel(col string) string {
 	case "orderType":
 		return "订单类型"
 	case "drama":
-		return "充值剧集"
+		return "剧集"
 	case "episodeList":
 		return "解锁集数"
 	case "beansCost":

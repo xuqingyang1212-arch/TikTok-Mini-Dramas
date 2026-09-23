@@ -128,7 +128,7 @@ export default function AdSessionManagement() {
         <FilterInput block label="用户ID" placeholder="请输入用户ID" value={draft.userId} onChange={(value) => update("userId", value)} />
         <FilterInput block label="Linkid" placeholder="请输入 Linkid" value={draft.linkId} onChange={(value) => update("linkId", value)} />
         <SelectFilter block label="小程序" value={draft.appId} onChange={(value) => update("appId", value)} options={appOptions} placeholder="全部" />
-        <FilterInput block label="剧集ID" placeholder="请输入剧集ID" value={draft.dramaId} onChange={(value) => update("dramaId", value)} />
+        <FilterInput block label="剧集" placeholder="请输入剧集ID或名称" value={draft.dramaId} onChange={(value) => update("dramaId", value)} />
         <SelectFilter block label="会话状态" value={draft.status} onChange={(value) => update("status", value)} options={statusOptions} placeholder="全部" />
         <DateRangePicker block label="创建时间" value={draft.createdAtRange} onChange={(value) => update("createdAtRange", value)} />
       </FilterBar>
@@ -140,7 +140,7 @@ export default function AdSessionManagement() {
         loading={loading && data.length === 0}
         empty={data.length === 0}
         header={[
-          "用户ID", "Linkid", "小程序", "剧集ID", "集数", "会话状态", "创建时间", "广告完成时间", "会话ID",
+          "用户ID", "Linkid", "小程序", "剧集", "集数", "会话状态", "创建时间", "广告完成时间", "会话ID",
         ].map((label) => <th key={label} className={thClass}>{label}</th>)}
       >
         {data.map((row, index) => (
@@ -148,7 +148,14 @@ export default function AdSessionManagement() {
             <td className={`${cellClass} font-mono text-[#4b5563]`}>{row.userId}</td>
             <td className={`${cellClass} font-mono text-[#4b5563]`}>{row.attributionLinkId || mutedDash}</td>
             <td className={`${cellClass} text-[#111827]`}>{row.appName}</td>
-            <td className={`${cellClass} font-mono text-[#4b5563]`}>{row.dramaId}</td>
+            <td className={cellClass}>
+              <div className="flex items-center gap-2 text-[#4b5563]">
+                <span>{row.dramaName || row.dramaId}</span>
+                {row.dramaName && row.dramaId && (
+                  <span className="font-mono text-[11.5px] text-[#9ca3af]">ID: {row.dramaId}</span>
+                )}
+              </div>
+            </td>
             <td className={`${cellClass} text-[#374151]`}>{row.episodeNo}</td>
             <td className={cellClass}><StatusBadge status={statusLabels[row.status] || row.status} config={statusConfig} /></td>
             <td className={`${cellClass} text-[#6b7280]`}>{formatDateTime(row.createdAt)}</td>
