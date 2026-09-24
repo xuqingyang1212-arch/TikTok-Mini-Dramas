@@ -13,18 +13,21 @@ import {
   type MonetizationType,
 } from "@/lib/api"
 import { useI18n } from "@/lib/i18n/I18nProvider"
+import {
+  buildAdShowParams,
+  buildIapParams,
+  buildPlaybackParams,
+  getLastFreeEpisode,
+  reportDemoMediaEvent,
+} from "@/lib/media-events"
 import { PaywallPanel } from "./PaywallPanel"
 import { VideoPlayerEpisodeList } from "./video-player/VideoPlayerEpisodeList"
 import {
-  applySwipeResistance,
   buildGridSlots,
   computeEpisodeTabs,
   formatTime,
   getVisibleEpisodes,
   resolveEpisodeSelection,
-  resolveEpisodeSelectionChange,
-  resolveEpisodeTabIndex,
-  resolveSwipeDecision,
 } from "./video-player/helpers"
 import { RewardedAdOverlay } from "./video-player/RewardedAdOverlay"
 import { usePlaybackControls } from "./video-player/usePlaybackControls"
@@ -38,7 +41,12 @@ interface VideoPlayerProps {
   userId: string
   monetizationType?: MonetizationType
   adPlacementId?: string
+  appName: string
+  clientKey: string
+  openId: string
+  paywallEpisode?: number
   onBack: () => void
+  onEpisodeChange?: (episodeNo: number) => void
   onEpisodesRefresh?: (episodes: Episode[]) => void
 }
 
@@ -49,7 +57,12 @@ export function VideoPlayer({
   userId,
   monetizationType,
   adPlacementId,
+  appName,
+  clientKey,
+  openId,
+  paywallEpisode,
   onBack,
+  onEpisodeChange,
   onEpisodesRefresh,
 }: VideoPlayerProps) {
   const { t } = useI18n()
@@ -96,13 +109,27 @@ export function VideoPlayer({
   const paySuccessTimerRef = useRef<number | null>(null)
   const isSwiping = useRef(false)
   const reportedVideoRef = useRef<HTMLVideoElement | null>(null)
+  const requestedVideoRef = useRef<HTMLVideoElement | null>(null)
+  const autoplayVideoRef = useRef<HTMLVideoElement | null>(null)
+  const reportedAdSessionRef = useRef<string | null>(null)
   const { isAndroid, viewportHeight, containerHeight } = useVideoViewport(playerRef)
 
   const sortedEpisodes = useMemo(() => normalizeEpisodeList(episodes), [episodes])
   const { prevEpisode, currentEpisodeData: episode, nextEpisodeData } = getAdjacentEpisodes(sortedEpisodes, currentEpisode)
 
+  useEffect(() => {
+    if (episode) onEpisodeChange?.(episode.episodeNo)
+  }, [episode, onEpisodeChange])
+
   const isCurrentEpisodeLocked = Boolean(episode && episode.isUnlocked === false)
   const isIaa = monetizationType === "IAA"
+  const eventContext = useMemo(() => ({
+    userId,
+    drama,
+    episodes: sortedEpisodes,
+    paywallEpisode,
+    episodeNo: currentEpisode,
+  }), [currentEpisode, drama, paywallEpisode, sortedEpisodes, userId])
   const canUnlockCurrentEpisodeByAd = Boolean(
     isIaa && episode?.canUnlockByAd && adPlacementId?.trim(),
   )
@@ -124,8 +151,12 @@ export function VideoPlayer({
     if (paySuccessTimerRef.current) clearTimeout(paySuccessTimerRef.current)
     paySuccessTimerRef.current = window.setTimeout(() => {
       if (controller.signal.aborted) return
-      void videoRef.current?.play().catch(() => undefined)
-      setIsPlaying(true)
+      const video = videoRef.current
+      if (!video) return
+      void video.play().catch(() => {
+        setIsPlaying(false)
+        setShowControls(true)
+      })
     }, 100)
   }, [drama.id, onEpisodesRefresh, userId])
 
@@ -157,12 +188,23 @@ export function VideoPlayer({
     }
   }, [clearControlsTimer])
 
+  const reportMediaEvent = useCallback((
+    eventName: Parameters<typeof reportDemoMediaEvent>[0]["eventName"],
+    params: Record<string, unknown>,
+    episodeNo = currentEpisode,
+  ) => {
+    void reportDemoMediaEvent({ userId, dramaId: drama.id, episodeNo, eventName, params })
+  }, [currentEpisode, drama.id, userId])
+
   useEffect(() => {
     if (!isCurrentEpisodeLocked) return
-    setShowPaywall(!isIaa)
+    if (!isIaa) {
+      reportMediaEvent("unlock_panel_show_request", buildIapParams(eventContext))
+      setShowPaywall(true)
+    }
     setIsPlaying(false)
     videoRef.current?.pause()
-  }, [isCurrentEpisodeLocked, isIaa])
+  }, [eventContext, isCurrentEpisodeLocked, isIaa, reportMediaEvent])
 
   const handlePaySuccess = async () => {
     try {
@@ -176,7 +218,10 @@ export function VideoPlayer({
 
   const handleLockedAction = async () => {
     if (!canUnlockCurrentEpisodeByAd) {
-      if (!isIaa) setShowPaywall(true)
+      if (!isIaa) {
+        reportMediaEvent("unlock_panel_show_request", buildIapParams(eventContext))
+        setShowPaywall(true)
+      }
       return
     }
 
@@ -192,6 +237,20 @@ export function VideoPlayer({
     adErrorTimerRef.current = setTimeout(() => setAdErrorMessage(""), 2400)
   }
 
+  const handleAdPlaybackStart = () => {
+    rewardedAd.startPlayback()
+    const sessionNo = rewardedAd.session?.sessionNo
+    if (!sessionNo || reportedAdSessionRef.current === sessionNo) return
+
+    reportedAdSessionRef.current = sessionNo
+    reportMediaEvent("minis_ad_show", buildAdShowParams({
+      ...eventContext,
+      appName,
+      clientKey,
+      openId,
+    }))
+  }
+
   const handleAdPlaybackError = async () => {
     await rewardedAd.cancel()
     setAdErrorMessage(t("player.adStartFailed"))
@@ -203,7 +262,7 @@ export function VideoPlayer({
 
   useEffect(() => {
     if (!episodeTabs.length) return
-    const nextTabIndex = resolveEpisodeTabIndex(currentEpisode)
+    const nextTabIndex = Math.floor((currentEpisode - 1) / 30)
     setActiveTab((previousTab) => (previousTab === nextTabIndex ? previousTab : nextTabIndex))
   }, [currentEpisode, episodeTabs])
 
@@ -233,9 +292,12 @@ export function VideoPlayer({
     }
 
     if (video.paused) {
-      void video.play().catch(() => undefined)
-      setIsPlaying(true)
-      hideControlsLater()
+      void video.play()
+        .then(() => hideControlsLater())
+        .catch(() => {
+          setIsPlaying(false)
+          setShowControls(true)
+        })
     } else {
       video.pause()
       setIsPlaying(false)
@@ -255,6 +317,12 @@ export function VideoPlayer({
     if (video) setDuration(video.duration)
   }
 
+  const handleVideoLoadStart = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    if (isCurrentEpisodeLocked || requestedVideoRef.current === event.currentTarget) return
+    requestedVideoRef.current = event.currentTarget
+    reportMediaEvent("video_play_request", buildPlaybackParams(eventContext, isIaa))
+  }
+
   const handleVideoPlay = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     setIsPlaying(true)
 
@@ -263,12 +331,17 @@ export function VideoPlayer({
     if (isCurrentEpisodeLocked || reportedVideoRef.current === event.currentTarget) return
 
     reportedVideoRef.current = event.currentTarget
+    reportMediaEvent("ep_play", buildPlaybackParams(eventContext, isIaa))
     miniApi.reportWatch(userId, drama.id, currentEpisode).catch((error) => {
       console.error("Failed to report episode watch:", error)
     })
   }
 
   const handleEnded = () => {
+    if (!isIaa && currentEpisode === getLastFreeEpisode(eventContext)) {
+      reportMediaEvent("add_to_wishlist", buildIapParams(eventContext))
+    }
+
     if (nextEpisodeData) {
       animateToEpisode(nextEpisodeData.episodeNo)
     } else {
@@ -346,7 +419,10 @@ export function VideoPlayer({
     
     if (Math.abs(deltaY) > 5) {
       isSwiping.current = true
-      setTranslateY(applySwipeResistance(deltaY))
+      // Keep a little resistance while making the video follow the finger.
+      const resistance = 0.72
+      const adjustedDelta = deltaY * resistance
+      setTranslateY(adjustedDelta)
     }
   }
 
@@ -360,15 +436,17 @@ export function VideoPlayer({
   const handleTouchEnd = () => {
     if (isDragging || isAnimating || showPaywall || isAdOpen) return
 
-    const decision = resolveSwipeDecision({
-      distance: swipeDistance.current,
-      containerHeight: containerHeight.current,
-      previousEpisodeNo: prevEpisode?.episodeNo,
-      nextEpisodeNo: nextEpisodeData?.episodeNo,
-    })
+    const threshold = Math.min(96, Math.max(64, containerHeight.current * 0.1))
+    const distance = swipeDistance.current
 
-    if (decision.type === "episode") {
-      animateToEpisode(decision.episodeNo)
+    if (Math.abs(distance) >= threshold) {
+      if (distance > 0 && nextEpisodeData) {
+        animateToEpisode(nextEpisodeData.episodeNo)
+      } else if (distance < 0 && prevEpisode) {
+        animateToEpisode(prevEpisode.episodeNo)
+      } else {
+        animateBack()
+      }
     } else {
       animateBack()
     }
@@ -410,23 +488,24 @@ export function VideoPlayer({
   // Select episode from list
   const selectEpisode = (ep: Episode) => {
     setShowEpisodeList(false)
-    const nextEpisode = resolveEpisodeSelectionChange(currentEpisode, ep.episodeNo)
-    if (nextEpisode !== null) {
-      setCurrentEpisode(nextEpisode)
+    if (ep.episodeNo !== currentEpisode) {
+      setCurrentEpisode(ep.episodeNo)
       setProgress(0)
     }
   }
 
-  // Auto-play on episode change
   useEffect(() => {
     const video = videoRef.current
-    const ep = episodes.find(e => e.episodeNo === currentEpisode)
-    if (video && !isAnimating && ep?.isUnlocked !== false) {
-      video.currentTime = 0
-      video.play().catch(() => {})
-      setIsPlaying(true)
-    }
-  }, [currentEpisode, episodes])
+    if (!video || autoplayVideoRef.current === video) return
+
+    autoplayVideoRef.current = video
+    if (isCurrentEpisodeLocked) return
+
+    void video.play().catch(() => {
+      setIsPlaying(false)
+      setShowControls(true)
+    })
+  }, [currentEpisode, isCurrentEpisodeLocked])
 
   if (!episode) {
     return (
@@ -481,59 +560,60 @@ export function VideoPlayer({
                 className="h-full w-full object-contain"
                 playsInline
                 muted={!isCurrent}
-                autoPlay={isCurrent && !isCurrentEpisodeLocked}
                 loop={false}
                 preload={offset > 0 ? "auto" : "metadata"}
                 onTimeUpdate={isCurrent ? handleTimeUpdate : undefined}
+                onLoadStart={isCurrent ? handleVideoLoadStart : undefined}
                 onLoadedMetadata={isCurrent ? handleLoadedMetadata : undefined}
                 onEnded={isCurrent ? handleEnded : undefined}
                 onPlay={isCurrent ? handleVideoPlay : undefined}
                 onPause={isCurrent ? () => setIsPlaying(false) : undefined}
               />
 
-              {isCurrent && isCurrentEpisodeLocked && !showPaywall && !isAdOpen && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-                  <Lock size={48} className="mb-3 text-white/50" />
-                  <p className="mb-4 text-[15px] text-white/70">
-                    {t("player.lockedEpisode", { episode: currentEpisode })}
-                  </p>
-                  {isIaa && !canUnlockCurrentEpisodeByAd ? (
-                    <p className="max-w-xs px-6 text-center text-[14px] leading-6 text-white/50">
-                      {t("player.adUnavailable")}
-                    </p>
-                  ) : (
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void handleLockedAction()
-                      }}
-                      disabled={rewardedAd.isStarting}
-                      className={cn(
-                        "flex min-h-11 items-center justify-center font-semibold text-white shadow-[0_6px_20px_rgba(255,138,52,0.28)] active:bg-[#f47c24] disabled:opacity-60",
-                        isIaa
-                          ? "mx-6 w-[calc(100%-3rem)] max-w-sm gap-2.5 rounded-xl bg-[#ff8a34] px-4 py-3 text-[15px]"
-                          : "rounded-full bg-[#ff8a34] px-6 py-2.5 text-[14px]",
-                      )}
-                    >
-                      {rewardedAd.isStarting ? (
-                        <Loader2 size={22} className="animate-spin" />
-                      ) : isIaa ? (
-                        <img
-                          src="/assets/ad-watch-icon.png"
-                          alt=""
-                          aria-hidden="true"
-                          className="h-7 w-7 object-contain"
-                          draggable={false}
-                        />
-                      ) : null}
-                      <span>{t(isIaa ? "player.watchAdToUnlock" : "player.unlockToWatch")}</span>
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           )
         })}
+
+        {isCurrentEpisodeLocked && !showPaywall && !isAdOpen && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+            <Lock size={48} className="mb-3 text-white/50" />
+            <p className="mb-4 text-[15px] text-white/70">
+              {t("player.lockedEpisode", { episode: currentEpisode })}
+            </p>
+            {isIaa && !canUnlockCurrentEpisodeByAd ? (
+              <p className="max-w-xs px-6 text-center text-[14px] leading-6 text-white/50">
+                {t("player.adUnavailable")}
+              </p>
+            ) : (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void handleLockedAction()
+                }}
+                disabled={rewardedAd.isStarting}
+                className={cn(
+                  "flex min-h-11 items-center justify-center font-semibold text-white shadow-[0_6px_20px_rgba(255,138,52,0.28)] active:bg-[#f47c24] disabled:opacity-60",
+                  isIaa
+                    ? "mx-6 w-[calc(100%-3rem)] max-w-sm gap-2.5 rounded-xl bg-[#ff8a34] px-4 py-3 text-[15px]"
+                    : "rounded-full bg-[#ff8a34] px-6 py-2.5 text-[14px]",
+                )}
+              >
+                {rewardedAd.isStarting ? (
+                  <Loader2 size={22} className="animate-spin" />
+                ) : isIaa ? (
+                  <img
+                    src="/assets/ad-watch-icon.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-7 w-7 object-contain"
+                    draggable={false}
+                  />
+                ) : null}
+                <span>{t(isIaa ? "player.watchAdToUnlock" : "player.unlockToWatch")}</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Top bar - 只显示返回按钮，不显示剧名 */}
@@ -639,6 +719,9 @@ export function VideoPlayer({
           dramaId={drama.id}
           userId={userId}
           currentEpisode={currentEpisode}
+          drama={drama}
+          episodes={sortedEpisodes}
+          effectivePaywallEpisode={paywallEpisode}
           onClose={() => setShowPaywall(false)}
           onPaySuccess={handlePaySuccess}
         />
@@ -660,7 +743,7 @@ export function VideoPlayer({
           onClose={rewardedAd.close}
           onCancel={() => void rewardedAd.cancel()}
           onContinue={rewardedAd.continueWatching}
-          onPlaybackStart={rewardedAd.startPlayback}
+          onPlaybackStart={handleAdPlaybackStart}
           onPlaybackPause={rewardedAd.pausePlayback}
           onPlaybackError={() => void handleAdPlaybackError()}
         />

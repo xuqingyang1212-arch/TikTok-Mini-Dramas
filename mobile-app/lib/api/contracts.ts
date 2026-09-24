@@ -46,7 +46,7 @@ export interface LoginResult {
   subscription?: Subscription
 }
 
-export interface UserActivationResult {
+export interface UserActivation {
   userId: string
   currentPromotionLinkId: string | null
   attributionUpdated: boolean
@@ -93,10 +93,29 @@ export interface WatchReportResult {
   watchedAt: string
 }
 
+export type MediaEventReportStatus = "success" | "failed" | "unsupported"
+
+export interface MediaEventReportRequest {
+  reportId: string
+  userId: string
+  dramaId: string
+  episodeNo: number
+  eventName: string
+  status: MediaEventReportStatus
+  params: Record<string, unknown>
+  result: Record<string, unknown>
+}
+
+export interface MediaEventReportResult {
+  id: string
+  reportId: string
+  duplicated: boolean
+  receivedAt: string
+}
+
 export interface AdUnlockSession {
   sessionNo: string
   status: "pending" | "already_unlocked" | "completed" | "canceled" | "expired"
-  attributionLinkId: string | null
   dramaId: string
   episodeNo: number
   adPlacementId: string
@@ -133,7 +152,6 @@ export interface SubscriptionPlan {
 
 export interface PaywallData {
   dramaId: string
-  currentPromotionLinkId: string | null
   totalEpisodes: number
   paywallEpisode: number
   beansPerEp: number
@@ -148,7 +166,6 @@ export interface UnlockOrder {
   orderNo: string
   orderType: "unlock"
   payStatus: "pending" | "paid" | "failed"
-  attributionLinkId: string | null
   beansCost: number
   episodes: number[]
 }
@@ -157,7 +174,6 @@ export interface SubscriptionOrder {
   orderNo: string
   orderType: "subscription"
   payStatus: "pending" | "paid" | "failed"
-  attributionLinkId: string | null
 }
 
 export interface PayResultResponse {

@@ -1,6 +1,7 @@
 import "./globals.css"
 import { I18nProvider } from "@/lib/i18n/I18nProvider"
-import { PromotionActivation } from "@/components/PromotionActivation"
+import { AuthProvider } from "@/components/AuthProvider"
+import { PromotionEntryController } from "@/components/PromotionEntryController"
 
 export default function RootLayout({
   children,
@@ -17,8 +18,11 @@ export default function RootLayout({
         <title>Mini Drama</title>
       </head>
       <body className="bg-black text-white antialiased">
-        <PromotionActivation />
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <PromotionEntryController>{children}</PromotionEntryController>
+          </AuthProvider>
+        </I18nProvider>
       </body>
     </html>
   )

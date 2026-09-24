@@ -19,6 +19,10 @@ export const zhMessages = {
 
   "home.empty": "暂无剧集",
   "home.refresh": "刷新",
+  "promotion.opening": "正在打开推广剧集...",
+  "promotion.openFailed": "推广链接打开失败",
+  "promotion.returnHome": "返回首页",
+  "promotion.retry": "重试",
   "nav.home": "首页",
   "nav.me": "我的",
 
@@ -124,6 +128,10 @@ export const enMessages: Record<TranslationKey, string> = {
 
   "home.empty": "No dramas available",
   "home.refresh": "Refresh",
+  "promotion.opening": "Opening promoted drama...",
+  "promotion.openFailed": "Failed to open promotion link",
+  "promotion.returnHome": "Return home",
+  "promotion.retry": "Retry",
   "nav.home": "Home",
   "nav.me": "Me",
 

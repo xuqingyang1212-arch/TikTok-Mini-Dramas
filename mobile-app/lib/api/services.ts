@@ -4,13 +4,15 @@ import type {
   Drama,
   Episode,
   LoginResult,
+  MediaEventReportRequest,
+  MediaEventReportResult,
   PayResultResponse,
   PaywallData,
   PaymentRecords,
+  UserActivation,
   SubscriptionOrder,
   UnlockOrder,
   UnlockStatus,
-  UserActivationResult,
   UserInfo,
   WatchReportResult,
 } from "./contracts"
@@ -29,15 +31,15 @@ export const miniApi = {
       body: JSON.stringify({ appId, openId }),
     }),
 
-  getUser: (userId: string, options?: RequestInit) =>
-    request<UserInfo>(`/users/${encodePathSegment(userId)}`, options),
-
   activateUser: (userId: string, linkId: string, options?: RequestInit) =>
-    request<UserActivationResult>("/users/activate", {
+    request<UserActivation>("/users/activate", {
       ...options,
       method: "POST",
       body: JSON.stringify({ userId, linkId }),
     }),
+
+  getUser: (userId: string, options?: RequestInit) =>
+    request<UserInfo>(`/users/${encodePathSegment(userId)}`, options),
 
   getPaymentRecords: (userId: string, options?: RequestInit) =>
     request<PaymentRecords>(`/users/${encodePathSegment(userId)}/payment-records`, options),
@@ -75,6 +77,13 @@ export const miniApi = {
       ...options,
       method: "POST",
       body: JSON.stringify({ userId, dramaId, episodeNo }),
+    }),
+
+  reportMediaEvent: (report: MediaEventReportRequest, options?: RequestInit) =>
+    request<MediaEventReportResult>("/media-event-reports", {
+      ...options,
+      method: "POST",
+      body: JSON.stringify(report),
     }),
 
   createAdUnlockSession: (userId: string, dramaId: string, episodeNo: number, options?: RequestInit) =>

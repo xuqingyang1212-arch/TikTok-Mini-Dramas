@@ -1,15 +1,19 @@
 "use client"
 
-import { useEffect, useMemo, useReducer, useRef } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react"
 import { CheckCircle, XCircle, Loader2 } from "lucide-react"
 import {
   getDevicePrice,
   miniApi,
+  type Drama,
+  type Episode,
+  type PayResultResponse,
   type PaywallData,
   type PaywallTier,
   type SubscriptionPlan,
 } from "@/lib/api"
 import { useI18n } from "@/lib/i18n/I18nProvider"
+import { buildIapParams, reportDemoMediaEvent } from "@/lib/media-events"
 import type { TranslationKey } from "@/lib/i18n/messages"
 import { PaymentSheet } from "./payment/PaymentSheet"
 import type { BeansOption } from "./payment/BeansOptionCard"
@@ -20,6 +24,9 @@ interface PaywallPanelProps {
   dramaId: string
   userId: string
   currentEpisode: number
+  drama: Drama
+  episodes: Episode[]
+  effectivePaywallEpisode?: number
   onClose: () => void
   onPaySuccess: () => void
   /** Optional app primary key; required by the API only before login. */
@@ -32,6 +39,7 @@ type PaywallState = {
   step: PaywallScreen
   paywall: PaywallData | null
   orderNo: string
+  orderType: "unlock" | "subscription" | null
   processingTextKey: TranslationKey
   error: string | null
 }
@@ -41,7 +49,7 @@ type PaywallAction =
   | { type: "load_success"; paywall: PaywallData }
   | { type: "load_error"; message: string }
   | { type: "submit_start"; processingTextKey: TranslationKey }
-  | { type: "submit_success"; orderNo: string }
+  | { type: "submit_success"; orderNo: string; orderType: "unlock" | "subscription" }
   | { type: "submit_error"; message: string }
   | { type: "result_start"; success: boolean }
   | { type: "result_success"; success: boolean }
@@ -77,6 +85,7 @@ const initialState: PaywallState = {
   step: "loading",
   paywall: null,
   orderNo: "",
+  orderType: null,
   processingTextKey: "payment.creatingOrder",
   error: null,
 }
@@ -92,7 +101,7 @@ function paywallReducer(state: PaywallState, action: PaywallAction): PaywallStat
     case "submit_start":
       return { ...state, step: "submitting", error: null, processingTextKey: action.processingTextKey }
     case "submit_success":
-      return { ...state, step: "result", orderNo: action.orderNo, error: null }
+      return { ...state, step: "result", orderNo: action.orderNo, orderType: action.orderType, error: null }
     case "submit_error":
       return { ...state, step: "error", error: action.message }
     case "result_start":
@@ -123,6 +132,9 @@ export function PaywallPanel({
   dramaId,
   userId,
   currentEpisode,
+  drama,
+  episodes,
+  effectivePaywallEpisode,
   onClose,
   onPaySuccess,
   appId,
@@ -133,6 +145,24 @@ export function PaywallPanel({
   const submitAbortRef = useRef<AbortController | null>(null)
   const resultAbortRef = useRef<AbortController | null>(null)
   const successTimerRef = useRef<number | null>(null)
+  const reportedShownPaywallRef = useRef<PaywallData | null>(null)
+
+  const reportMediaEvent = useCallback((eventName: "unlock_panel_show" | "unlock_panel_click" | "unlock_success" | "start_unlock" | "complete_watching", episodeNo = currentEpisode) => {
+    const context = {
+      userId,
+      drama,
+      episodes,
+      paywallEpisode: state.paywall?.paywallEpisode ?? effectivePaywallEpisode,
+      episodeNo,
+    }
+    void reportDemoMediaEvent({
+      userId,
+      dramaId,
+      episodeNo,
+      eventName,
+      params: buildIapParams(context),
+    })
+  }, [currentEpisode, drama, effectivePaywallEpisode, episodes, state.paywall?.paywallEpisode, userId])
 
   const loadPaywall = async () => {
     loadAbortRef.current?.abort()
@@ -164,6 +194,12 @@ export function PaywallPanel({
     }
   }, [dramaId, userId, appId, currentEpisode])
 
+  useEffect(() => {
+    if (state.step !== "select" || !state.paywall || reportedShownPaywallRef.current === state.paywall) return
+    reportedShownPaywallRef.current = state.paywall
+    reportMediaEvent("unlock_panel_show")
+  }, [reportMediaEvent, state.paywall, state.step])
+
   const beansOptions = useMemo<BeansOption[]>(() => {
     if (!state.paywall) return []
     return state.paywall.tiers.map((tier: PaywallTier) => {
@@ -193,6 +229,7 @@ export function PaywallPanel({
 
   const handleBeansTier = async (option: BeansOption) => {
     if (state.step === "submitting" || state.step === "processing" || state.step === "result" || state.step === "success") return
+    reportMediaEvent("unlock_panel_click")
     const controller = new AbortController()
     submitAbortRef.current?.abort()
     submitAbortRef.current = controller
@@ -201,7 +238,7 @@ export function PaywallPanel({
     try {
       const order = await miniApi.createUnlockOrder(userId, dramaId, option.key, currentEpisode, { signal: controller.signal })
       if (controller.signal.aborted) return
-      dispatch({ type: "submit_success", orderNo: order.orderNo })
+      dispatch({ type: "submit_success", orderNo: order.orderNo, orderType: "unlock" })
     } catch (error) {
       if (controller.signal.aborted) return
       const message = error instanceof Error ? error.message : "Failed to create order"
@@ -211,6 +248,7 @@ export function PaywallPanel({
 
   const handleSubscription = async (option: VipOption) => {
     if (state.step === "submitting" || state.step === "processing" || state.step === "result" || state.step === "success") return
+    reportMediaEvent("unlock_panel_click")
     const controller = new AbortController()
     submitAbortRef.current?.abort()
     submitAbortRef.current = controller
@@ -219,7 +257,7 @@ export function PaywallPanel({
     try {
       const order = await miniApi.createSubscriptionOrder(userId, option.planId, dramaId, { signal: controller.signal })
       if (controller.signal.aborted) return
-      dispatch({ type: "submit_success", orderNo: order.orderNo })
+      dispatch({ type: "submit_success", orderNo: order.orderNo, orderType: "subscription" })
     } catch (error) {
       if (controller.signal.aborted) return
       const message = error instanceof Error ? error.message : "Failed to create order"
@@ -236,11 +274,24 @@ export function PaywallPanel({
     dispatch({ type: "result_start", success })
 
     try {
-      const result = await miniApi.reportPayResult(state.orderNo, success, { signal: controller.signal })
+      const result: PayResultResponse = await miniApi.reportPayResult(state.orderNo, success, { signal: controller.signal })
       if (controller.signal.aborted) return
-      const paid = result.payStatus === "paid"
+      const paid = success && result.payStatus === "paid"
       dispatch({ type: "result_success", success: paid })
       if (paid) {
+        reportMediaEvent("unlock_success")
+        if (state.orderType === "subscription") {
+          reportMediaEvent("start_unlock")
+          reportMediaEvent("complete_watching")
+        } else {
+          const paywallEpisode = state.paywall?.paywallEpisode ?? effectivePaywallEpisode
+          if (paywallEpisode && result.unlocked?.includes(paywallEpisode)) {
+            reportMediaEvent("start_unlock")
+          }
+          if (result.unlocked?.includes(drama.episodeCount)) {
+            reportMediaEvent("complete_watching")
+          }
+        }
         if (successTimerRef.current) window.clearTimeout(successTimerRef.current)
         successTimerRef.current = window.setTimeout(() => onPaySuccess(), 1000)
       }

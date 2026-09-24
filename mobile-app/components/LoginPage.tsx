@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef } from "react"
 import { ChevronDown, Check } from "lucide-react"
-import { miniApi, type AppInfo } from "@/lib/api"
+import { miniApi, type AppInfo, type LoginResult } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/I18nProvider"
 
 interface LoginPageProps {
-  onLogin: (userId: string, app: AppInfo) => void
+  onLogin: (result: LoginResult, app: AppInfo, openId: string) => void
 }
 
 function MonetizationBadge({ type }: { type?: AppInfo["monetizationType"] }) {
@@ -88,7 +88,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
     try {
       const result = await miniApi.login(selectedApp, openId.trim())
-      onLogin(result.userId, selectedAppInfo)
+      onLogin(result, selectedAppInfo, openId.trim())
     } catch (err: any) {
       setError(err.message || t("login.failed"))
     } finally {

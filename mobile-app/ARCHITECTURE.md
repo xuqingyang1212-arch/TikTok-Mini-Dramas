@@ -29,9 +29,8 @@ flowchart LR
 
 ```text
 mobile-app/
-├── app/                       # App Router、根页面、物理 /player 路由和全局布局
+├── app/                       # App Router、根页面和全局样式
 ├── components/                # 首页、登录、播放器、付费墙和个人中心
-│   ├── app-shell/             # 会话、浏览器导航和剧集选择 Hooks
 │   ├── video-player/          # 播放器子组件、Hooks 和纯函数
 │   └── payment/               # 支付相关子组件或状态逻辑
 ├── lib/
@@ -104,15 +103,27 @@ transport → platform
 
 [lib/api/services.ts](./lib/api/services.ts) 按登录、应用、短剧、观看、支付和广告等领域提供语义化方法。组件只调用 Service，不拼 URL，不理解统一响应壳。
 
-推广链接采用多页面播放地址 `/player?dramaId=xxx&linkId=xxx`。根布局统一读取小驼峰 `linkId`：只有任意页面被外部直接打开或浏览器刷新且 URL 携带 `linkId` 时，才在取得 `userId` 后通过 Service 调用 `/api/mini/users/activate`（`userId + linkId`）；客户端内部路由跳转不得重复上报。激活接口只更新归因，不返回剧集或触发跳转，播放器导航始终由当前 URL 的 `dramaId` 决定。
+推广入口检测位于根布局下的全局控制层，而不是某个业务页面。应用从外部打开任意路径时，从入口 URL、TikTok 启动参数或场景参数读取并暂存小驼峰 `linkId`；登录态可用后通过 Service 调用 `/api/mini/users/activate`（请求体为 `userId + linkId`）。激活只更新归因，不决定当前页面和播放目标；页面仍由自身路径及参数驱动。客户端内部路由跳转不会重新捕获入口，因此不算激活。
+
+激活成功后将响应的 `currentPromotionLinkId` 写入共享用户状态和本地持久化，并仅清除待处理状态；入口 URL 上的 `linkId` 保持不变，使浏览器刷新被视为一次新的外部入口并再次激活。退出登录时清理待处理状态和 URL `linkId`。激活请求在后台执行，不阻塞页面导航或播放；Linkid 与当前小程序不匹配等归因失败只记录日志，不向用户展示错误、重试或跳转界面。激活逻辑不与登录请求合并。
+
+登录接口和用户详情接口返回的 `currentPromotionLinkId` 是服务端当前末次归因。前端将它保存在当前用户登录态中，推广激活成功时以激活响应覆盖，直到退出登录才清除；从非推广入口恢复登录时以用户详情响应同步。其他业务接口不传 `linkId`，由服务端根据 `userId` 补全归因并保存业务快照。
 
 ## 4. 页面和组件边界
 
 ### 页面容器
 
-`app/` 只负责 Next.js 入口、全局布局和顶层页面装配。根页面与物理 `/player` 页面复用 `AppController`，不得复制会话、导航或剧集加载状态。复杂业务不得重新堆积到 `app/page.tsx`。
+`app/` 使用 Next.js App Router 提供独立页面路径，页面状态不得再由根页面内的 `view` 或 `activeTab` 状态模拟。当前路径契约为：
 
-`AppController` 只组合页面级流程；会话恢复、浏览器 History 和剧集选择分别由 `app-shell/useAppSession`、`useBrowserNavigation`、`useDramaSelection` 管理。推广归因由根布局中的 `PromotionActivation` 独立处理，与 `dramaId` 导航职责分离。
+- `/`：剧集首页。
+- `/login`：登录页；`next` 参数用于登录后恢复原目标页面。
+- `/me`：个人中心。
+- `/purchase-records`：购买记录。
+- `/player?dramaId={id}&episode={episodeNo}`：播放页；剧集 ID 和集数是页面数据源，必须支持直接访问和刷新恢复。
+
+用户切换剧集时进入新的 `/player` URL；播放器内部切集时使用路由替换同步 `episode`，避免每次切集堆叠历史记录。共享登录态和应用配置由根布局中的认证 Provider 管理，各页面负责自己的数据加载和导航。
+
+`app/` 只负责 Next.js 入口、全局布局和顶层页面装配。复杂业务不得全部堆积到 `app/page.tsx`。
 
 ### 业务组件
 
@@ -154,6 +165,23 @@ transport → platform
 - 解锁后重新拉取服务端剧集/权益数据，再进入播放。
 - 观看记录中的 `unlockType` 使用服务端判定结果。
 
+### 媒体事件上报
+
+TikTok 中间事件参数由 [lib/media-events.ts](./lib/media-events.ts) 集中构建，组件只在真实业务生命周期节点触发事件，并通过 [lib/api/services.ts](./lib/api/services.ts) 的 `reportMediaEvent` 保存回调结果，禁止组件直接请求接口。
+
+当前演示环境不调用 TikTok SDK，统一生成合法 `reportId`，并按接口可用、SDK 回调成功的数据结构提交 `/api/mini/media-event-reports`，上报数据中不增加演示或模拟标识。`params`原样保存 SDK 事件参数；`result.eventOccurredAt`记录前端业务事件发生时间；`result.canIUseReportEvent`保存能力检测结果；`result.reportEvent`按照 SDK 调用结构保存完整事件名、参数、`sdkReportedAt`、`sdkCallbackAt`和 `callbackResult`，便于分别校对业务触发、SDK 调用、SDK 回调及服务端接收时间。三个前端时间均使用 UTC ISO 8601；服务端接收时间仍由服务端生成。后续接入真实 SDK 时只替换该模块内的 SDK 调用和回调映射，不改变播放器、广告及支付状态机的触发点。媒体事件保存失败仅记录错误，不能阻断播放、广告解锁或支付。
+
+触发边界：
+
+- `video_play_request` 在当前已解锁主视频节点准备播放时上报；同一节点暂停恢复不重复。
+- `ep_play` 在主视频真实触发播放后上报；同一节点暂停恢复不重复。
+- `add_to_wishlist` 在 IAP 最后一集免费集真实播放结束时上报。
+- `unlock_panel_show_request`、`unlock_panel_show`、`unlock_panel_click` 分别对应请求打开、成功展示和点击付费方案。
+- 支付成功均上报 `unlock_success`；Beans 本单解锁第一付费集或最后一集时分别上报 `start_unlock`、`complete_watching`，订阅成功同时上报两者。
+- `minis_ad_show` 在 IAA 广告视频真实开始播放时上报，同一广告会话暂停恢复不重复；SDK 参数集数遵循媒体规范使用上一集，服务端顶层 `episodeNo`仍使用当前集。
+
+付费边界必须优先采用当前用户剧集接口或付费墙接口返回的有效 `paywallEpisode`，以兼容推广归因改变卡点。是否首次广告展示依据当前剧集列表是否已有 `unlockType: ad`。媒体里程碑不做 `userId + dramaId` 客户端持久化去重，仅按当前节点、广告会话或本次支付结果判断。
+
 ## 6. 统一权益消费
 
 小程序消费以下权益结果：
@@ -166,11 +194,11 @@ transport → platform
 | `ad` | 直接播放，可展示广告解锁来源 |
 | `locked` | 根据应用变现模式进入广告或付费墙 |
 
-前端只负责流程分流，不能自行从订单、会员或广告历史重新计算最终播放权。已有 Beans/广告永久解锁和未到期会员在应用变现模式切换后仍由服务端判定为有效。
+前端只负责流程分流，不能自行从订单、会员或广告历史重新计算最终播放权。
 
 ## 7. IAA/IAP 分流
 
-应用配置中的 `monetizationType` 是锁定内容获取新权益时的唯一分流依据；它不撤销服务端已经返回的历史权益：
+应用配置中的 `monetizationType` 是唯一分流依据：
 
 ```mermaid
 flowchart TD
@@ -185,8 +213,8 @@ flowchart TD
 
 规则：
 
-- IAA 用户不展示会员卡和购买记录入口，但服务端返回的未到期历史会员仍允许播放。
-- IAP 用户不进入广告会话流程，但已完成的历史广告永久解锁仍允许播放。
+- IAA 用户不展示会员卡和购买记录入口。
+- IAP 用户不进入广告会话流程。
 - 广告位缺失时显示不可用错误，不回退到 IAP。
 - 应用配置在登录后、页面重新可见、窗口重新获得焦点及进入个人中心等关键时机刷新。
 - 前端显隐不替代服务端对变现模式的校验。
@@ -222,7 +250,7 @@ flowchart TD
 - 成功、失败和关闭。
 - 请求中止及定时器清理。
 
-订单请求必须携带用户实际选中的 `currentEpisode`。模拟支付参数只表达本次演示操作，界面终态必须采用服务端响应的 `payStatus`，不得根据请求参数猜测支付结果；仅当服务端返回 `paid` 时进入成功页并重新获取服务端权益。
+订单请求必须携带用户实际选中的 `currentEpisode`。支付成功后不直接伪造本地权益，应重新获取服务端结果。
 
 ## 10. 国际化与时间
 
