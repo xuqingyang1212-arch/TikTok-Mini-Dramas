@@ -24,6 +24,8 @@ import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagedQuery } from "@/hooks/use-paged-query"
 import { usePagination } from "@/hooks/use-pagination"
+import { AppSelectFilter } from "@/components/app-select-filter"
+import { MonetizationBadge } from "@/components/shared"
 
 interface FilterForm {
   userId: string
@@ -64,7 +66,7 @@ const statusConfig: Record<string, StatusStyleConfig> = {
   已过期: { bg: "bg-[#fef2f2]", text: "text-[#dc2626]" },
 }
 
-const exportColumns = "userId,attributionLinkId,appName,dramaId,episodeNo,status,createdAt,completedAt,sessionNo"
+const exportColumns = "userId,attributionLinkId,appName,monetizationType,dramaId,episodeNo,status,createdAt,completedAt,sessionNo"
 const cellClass = "px-4 py-3 text-[12.5px] whitespace-nowrap"
 const mutedDash = <span className="text-[#9ca3af]">-</span>
 
@@ -72,8 +74,7 @@ export default function AdSessionManagement() {
   const canExport = usePerm("finance.ad-session.export")
   const { draft, active, update, apply, reset } = useFilters(defaultFilters)
   const { page, pageSize, resetPage, paginationProps } = usePagination()
-  const { options } = useAppOptions(100)
-  const appOptions = options.map((app) => ({ label: app.name, value: String(app.id) }))
+  const { options: appOptions } = useAppOptions(1000)
   const [exporting, setExporting] = useState(false)
 
   const buildFilterParams = useCallback(() => ({
@@ -127,7 +128,7 @@ export default function AdSessionManagement() {
       >
         <FilterInput block label="用户ID" placeholder="请输入用户ID" value={draft.userId} onChange={(value) => update("userId", value)} />
         <FilterInput block label="Linkid" placeholder="请输入 Linkid" value={draft.linkId} onChange={(value) => update("linkId", value)} />
-        <SelectFilter block label="小程序" value={draft.appId} onChange={(value) => update("appId", value)} options={appOptions} placeholder="全部" />
+        <AppSelectFilter block label="小程序" value={draft.appId} onChange={(value) => update("appId", value)} apps={appOptions} placeholder="全部" />
         <FilterInput block label="剧集" placeholder="请输入剧集ID或名称" value={draft.dramaId} onChange={(value) => update("dramaId", value)} />
         <SelectFilter block label="会话状态" value={draft.status} onChange={(value) => update("status", value)} options={statusOptions} placeholder="全部" />
         <DateRangePicker block label="创建时间" value={draft.createdAtRange} onChange={(value) => update("createdAtRange", value)} />
@@ -147,7 +148,12 @@ export default function AdSessionManagement() {
           <tr key={row.id} className={cn("transition-colors hover:bg-[#f9fafb]", index < data.length - 1 && "border-b border-[#f3f4f6]")}>
             <td className={`${cellClass} font-mono text-[#4b5563]`}>{row.userId}</td>
             <td className={`${cellClass} font-mono text-[#4b5563]`}>{row.attributionLinkId || mutedDash}</td>
-            <td className={`${cellClass} text-[#111827]`}>{row.appName}</td>
+            <td className={cellClass}>
+              <div className="flex items-center gap-2">
+                <span className="text-[#111827]">{row.appName}</span>
+                <MonetizationBadge type={row.monetizationType} />
+              </div>
+            </td>
             <td className={cellClass}>
               <div className="flex items-center gap-2 text-[#4b5563]">
                 <span>{row.dramaName || row.dramaId}</span>

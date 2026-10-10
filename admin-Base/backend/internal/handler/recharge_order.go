@@ -169,13 +169,13 @@ func (a *Application) ExportRechargeOrders(c *gin.Context) {
 
 // 导出列的默认顺序（与前端 ALL_COLUMNS 的默认可见列一致）。
 var defaultRechargeColumns = []string{
-	"userId", "attributionLinkId", "appName", "orderType", "drama", "beansCost", "subscribeAmount",
+	"userId", "attributionLinkId", "appName", "monetizationType", "orderType", "drama", "beansCost", "subscribeAmount",
 	"deviceOs", "payStatus", "createdAt", "orderNo", "thirdPartyOrderNo",
 }
 
 // 前端可能传入的全部合法列 key，用于过滤非法参数。
 var validRechargeColumns = map[string]bool{
-	"userId": true, "attributionLinkId": true, "appName": true, "orderType": true, "drama": true,
+	"userId": true, "attributionLinkId": true, "appName": true, "monetizationType": true, "orderType": true, "drama": true,
 	"episodeList": true, "beansCost": true, "period": true,
 	"subscribeAmount": true, "deviceOs": true, "payStatus": true,
 	"createdAt": true, "paidAt": true, "orderNo": true, "thirdPartyOrderNo": true,
@@ -206,6 +206,8 @@ func rechargeColumnLabel(col string) string {
 		return "Linkid"
 	case "appName":
 		return "小程序"
+	case "monetizationType":
+		return "变现类型"
 	case "orderType":
 		return "订单类型"
 	case "drama":
@@ -263,6 +265,8 @@ func rechargeColumnValue(col string, it service.RechargeOrderItem) interface{} {
 		return ""
 	case "appName":
 		return it.AppName
+	case "monetizationType":
+		return it.MonetizationType
 	case "orderType":
 		return orderTypeLabel(it.OrderType)
 	case "drama":

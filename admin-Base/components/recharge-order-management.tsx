@@ -13,6 +13,8 @@ import { usePerm } from "@/components/admin-layout"
 import { usePagination } from "@/hooks/use-pagination"
 import { useAppOptions } from "@/hooks/use-app-options"
 import { usePagedQuery } from "@/hooks/use-paged-query"
+import { AppSelectFilter } from "@/components/app-select-filter"
+import { MonetizationBadge } from "@/components/shared"
 
 interface FilterForm {
   appId: string
@@ -128,7 +130,12 @@ const ALL_COLUMNS: OrderColumn[] = [
   },
   {
     key: "appName", label: "小程序",
-    render: (r) => <span className="text-[#111827]">{r.appName}</span>,
+    render: (r) => (
+      <div className="flex items-center gap-2">
+        <span className="text-[#111827]">{r.appName}</span>
+        <MonetizationBadge type={r.monetizationType} />
+      </div>
+    ),
   },
   {
     key: "orderType", label: "订单类型",
@@ -197,8 +204,7 @@ export default function RechargeOrderManagement() {
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
 
   const [exporting, setExporting] = useState(false)
-  const { options: rawAppOptions } = useAppOptions(100)
-  const appOptions = rawAppOptions.map((app) => ({ label: app.name, value: String(app.id) }))
+  const { options: appOptions } = useAppOptions(1000)
 
   // 自定义列展示：勾选结果持久化到 localStorage（按登录用户隔离）。
   const colSettings = useColumnSettings("recharge-order-v2", ALL_COLUMNS)
@@ -248,7 +254,10 @@ export default function RechargeOrderManagement() {
     setExporting(true)
     try {
       // 按当前可见列导出：把列 key 顺序传给后端，后端据此生成 xlsx 表头与列。
-      await rechargeOrderApi.export({ ...buildFilterParams(), columns: visibleColumns.map((c) => c.key).join(",") })
+      const exportColumnKeys = visibleColumns.flatMap((column) =>
+        column.key === "appName" ? [column.key, "monetizationType"] : [column.key],
+      )
+      await rechargeOrderApi.export({ ...buildFilterParams(), columns: exportColumnKeys.join(",") })
     } catch {
       toast.error("导出失败")
     } finally {
@@ -268,7 +277,7 @@ export default function RechargeOrderManagement() {
       >
         <FilterInput block label="用户ID" placeholder="请输入" value={draftFilters.userId} onChange={(v) => updateDraft("userId", v)} />
         <FilterInput block label="Linkid" placeholder="请输入 Linkid" value={draftFilters.linkId} onChange={(v) => updateDraft("linkId", v)} />
-        <SelectFilter block label="小程序" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} options={appOptions} placeholder="全部" />
+        <AppSelectFilter block label="小程序" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} apps={appOptions} placeholder="全部" />
         <SelectFilter block label="订单类型" value={draftFilters.orderType} onChange={(v) => updateDraft("orderType", v)} options={orderTypeOptions} placeholder="全部" />
         <FilterInput block label="剧集" placeholder="请输入剧集ID或名称" value={draftFilters.dramaId} onChange={(v) => updateDraft("dramaId", v)} />
         <SelectFilter block label="设备系统" value={draftFilters.deviceOs} onChange={(v) => updateDraft("deviceOs", v)} options={deviceOsOptions} placeholder="全部" />

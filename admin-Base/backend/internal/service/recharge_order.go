@@ -34,6 +34,7 @@ type RechargeOrderItem struct {
 	ThirdPartyOrderNo string  `json:"thirdPartyOrderNo"`
 	AppID             string  `json:"appId"`
 	AppName           string  `json:"appName"`
+	MonetizationType  string  `json:"monetizationType"`
 	UserID            string  `json:"userId"`
 	AttributionLinkID *string `json:"attributionLinkId"`
 	OrderType         string  `json:"orderType"`
@@ -181,14 +182,18 @@ func (s *rechargeOrderService) buildItems(orders []model.PaymentOrder) ([]Rechar
 			planIDs = append(planIDs, o.PlanID)
 		}
 	}
-	appNames := map[int64]string{}
+	type appMetadata struct {
+		Name             string
+		MonetizationType string
+	}
+	appMetadataByID := map[int64]appMetadata{}
 	if len(appIDs) > 0 {
 		var apps []model.App
 		if err := s.db.Where("id IN ?", appIDs).Find(&apps).Error; err != nil {
 			return nil, 0, err
 		}
 		for _, a := range apps {
-			appNames[a.ID] = a.Name
+			appMetadataByID[a.ID] = appMetadata{Name: a.Name, MonetizationType: a.MonetizationType}
 		}
 	}
 	dramaNames := map[int64]string{}
@@ -214,12 +219,14 @@ func (s *rechargeOrderService) buildItems(orders []model.PaymentOrder) ([]Rechar
 
 	items := make([]RechargeOrderItem, len(orders))
 	for i, o := range orders {
+		app := appMetadataByID[o.AppID]
 		item := RechargeOrderItem{
 			ID:                fmt.Sprintf("%d", o.ID),
 			OrderNo:           o.OrderNo,
 			ThirdPartyOrderNo: o.ThirdPartyOrderNo,
 			AppID:             fmt.Sprintf("%d", o.AppID),
-			AppName:           appNames[o.AppID],
+			AppName:           app.Name,
+			MonetizationType:  app.MonetizationType,
 			UserID:            fmt.Sprintf("%d", o.UserID),
 			AttributionLinkID: promotionLinkIDString(o.AttributionLinkID),
 			OrderType:         o.OrderType,

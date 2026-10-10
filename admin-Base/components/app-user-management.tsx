@@ -11,6 +11,9 @@ import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
 import { useAppOptions } from "@/hooks/use-app-options"
 import { usePagedQuery } from "@/hooks/use-paged-query"
+import { AppSelectFilter } from "@/components/app-select-filter"
+import { MonetizationBadge } from "@/components/shared"
+import type { MonetizationType } from "@/lib/api"
 
 // ─────────────── Types ───────────────
 interface AppUserItem {
@@ -18,6 +21,7 @@ interface AppUserItem {
   userId: string
   appId: number
   appName: string
+  monetizationType: MonetizationType
   openId: string
   unionId: string
   createdAt: string
@@ -145,8 +149,7 @@ export default function AppUserManagement() {
   // ─── Filter & Pagination ───
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page: currentPage, pageSize, resetPage, paginationProps } = usePagination()
-  const { options: rawAppOptions } = useAppOptions(100)
-  const appOptions = rawAppOptions.map((app) => ({ label: app.name, value: String(app.id) }))
+  const { options: appOptions } = useAppOptions(1000)
 
   const fetchList = useCallback(({ page, pageSize, filters }: { page: number; pageSize: number; filters?: FilterForm }) => (
     appUserApi.list<AppUserItem>({
@@ -189,7 +192,7 @@ export default function AppUserManagement() {
       <FilterBar
         actions={<FilterActions onQuery={handleQuery} onReset={handleReset} />}
       >
-        <SelectFilter block label="小程序" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} options={appOptions} placeholder="全部" />
+        <AppSelectFilter block label="小程序" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} apps={appOptions} placeholder="全部" />
         <FilterInput block label="用户ID" placeholder="请输入" value={draftFilters.userId} onChange={(v) => updateDraft("userId", v)} />
         <FilterInput block label="openid" placeholder="请输入" value={draftFilters.openId} onChange={(v) => updateDraft("openId", v)} />
         <FilterInput block label="unionid" placeholder="请输入" value={draftFilters.unionId} onChange={(v) => updateDraft("unionId", v)} />
@@ -211,7 +214,12 @@ export default function AppUserManagement() {
             {data.map((row, i) => (
                 <tr key={row.id}
                   className={cn("transition-colors hover:bg-[#f9fafb]", i < data.length - 1 && "border-b border-[#f3f4f6]")}>
-                  <td className="px-4 py-3 text-[12.5px] text-[#111827] whitespace-nowrap">{row.appName}</td>
+                  <td className="px-4 py-3 text-[12.5px] text-[#111827] whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <span>{row.appName}</span>
+                      <MonetizationBadge type={row.monetizationType} />
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.userId}</td>
                   <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.openId}</td>
                   <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.unionId}</td>

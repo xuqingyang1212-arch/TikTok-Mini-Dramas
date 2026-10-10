@@ -28,6 +28,7 @@ import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagedQuery } from "@/hooks/use-paged-query"
 import { usePagination } from "@/hooks/use-pagination"
+import { AppSelectFilter } from "@/components/app-select-filter"
 
 interface FilterForm {
   userId: string
@@ -84,11 +85,6 @@ export default function MediaEventManagement() {
   const { draft, active, update, apply, reset } = useFilters(defaultFilters)
   const { page, pageSize, resetPage, paginationProps } = usePagination()
   const { options, error: appError } = useAppOptions(1000)
-  const appOptions = options.map((app) => ({
-    label: app.name,
-    value: String(app.id),
-    extra: <MonetizationBadge type={app.monetizationType} />,
-  }))
   const [exporting, setExporting] = useState(false)
   const [selectedReport, setSelectedReport] = useState<MediaEventReportItem | null>(null)
 
@@ -168,7 +164,7 @@ export default function MediaEventManagement() {
         }
       >
         <FilterInput block label="用户ID" placeholder="请输入用户ID" value={draft.userId} onChange={(value) => update("userId", value)} />
-        <SelectFilter block label="小程序" value={draft.appId} onChange={(value) => update("appId", value)} options={appOptions} placeholder="全部" />
+        <AppSelectFilter block label="小程序" value={draft.appId} onChange={(value) => update("appId", value)} apps={options} placeholder="全部" />
         <FilterInput block label="Linkid" placeholder="请输入 Linkid" value={draft.linkId} onChange={(value) => update("linkId", value)} />
         <FilterInput block label="剧集" placeholder="请输入剧集ID或名称" value={draft.drama} onChange={(value) => update("drama", value)} />
         <FilterInput block label="事件名称" placeholder="请输入完整事件名称" value={draft.eventName} onChange={(value) => update("eventName", value)} />

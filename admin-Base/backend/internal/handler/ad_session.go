@@ -48,11 +48,11 @@ func (a *Application) ListAdSessions(c *gin.Context) {
 }
 
 var defaultAdSessionColumns = []string{
-	"userId", "attributionLinkId", "appName", "dramaId", "episodeNo", "status", "createdAt", "completedAt", "sessionNo",
+	"userId", "attributionLinkId", "appName", "monetizationType", "dramaId", "episodeNo", "status", "createdAt", "completedAt", "sessionNo",
 }
 
 var validAdSessionColumns = map[string]bool{
-	"userId": true, "attributionLinkId": true, "appName": true, "dramaId": true,
+	"userId": true, "attributionLinkId": true, "appName": true, "monetizationType": true, "dramaId": true,
 	"episodeNo": true, "status": true, "createdAt": true, "completedAt": true,
 	"sessionNo": true,
 }
@@ -84,6 +84,8 @@ func adSessionColumnLabel(column string) string {
 		return "Linkid"
 	case "appName":
 		return "小程序"
+	case "monetizationType":
+		return "变现类型"
 	case "dramaId":
 		return "剧集"
 	case "episodeNo":
@@ -127,6 +129,8 @@ func adSessionColumnValue(column string, item service.AdSessionItem) interface{}
 		return ""
 	case "appName":
 		return item.AppName
+	case "monetizationType":
+		return item.MonetizationType
 	case "dramaId":
 		if item.DramaName != "" {
 			return item.DramaName

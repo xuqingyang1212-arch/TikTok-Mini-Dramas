@@ -30,13 +30,14 @@ type AppUserListFilter struct {
 }
 
 type AppUserListItem struct {
-	ID        string        `json:"id"`
-	UserID    string        `json:"userId"`
-	AppID     int64         `json:"appId"`
-	AppName   string        `json:"appName"`
-	OpenID    string        `json:"openId"`
-	UnionID   string        `json:"unionId"`
-	CreatedAt datetime.Time `json:"createdAt"`
+	ID               string        `json:"id"`
+	UserID           string        `json:"userId"`
+	AppID            int64         `json:"appId"`
+	AppName          string        `json:"appName"`
+	MonetizationType string        `json:"monetizationType"`
+	OpenID           string        `json:"openId"`
+	UnionID          string        `json:"unionId"`
+	CreatedAt        datetime.Time `json:"createdAt"`
 	// 当前订阅状态："active"（生效中）/"expired"（已过期）/""（未订阅）
 	SubscriptionStatus   string         `json:"subscriptionStatus"`
 	SubscriptionExpireAt *datetime.Time `json:"subscriptionExpireAt"`
@@ -174,14 +175,15 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 
 	page, size := normalizePage(f.Page, f.PageSize)
 	var results []struct {
-		ID        int64     `gorm:"column:id"`
-		AppID     int64     `gorm:"column:app_id"`
-		AppName   string    `gorm:"column:app_name"`
-		OpenID    string    `gorm:"column:open_id"`
-		UnionID   string    `gorm:"column:union_id"`
-		CreatedAt time.Time `gorm:"column:created_at"`
+		ID               int64     `gorm:"column:id"`
+		AppID            int64     `gorm:"column:app_id"`
+		AppName          string    `gorm:"column:app_name"`
+		MonetizationType string    `gorm:"column:monetization_type"`
+		OpenID           string    `gorm:"column:open_id"`
+		UnionID          string    `gorm:"column:union_id"`
+		CreatedAt        time.Time `gorm:"column:created_at"`
 	}
-	err := db.Select("app_users.id, app_users.app_id, apps.name as app_name, app_users.open_id, app_users.union_id, app_users.created_at").
+	err := db.Select("app_users.id, app_users.app_id, apps.name as app_name, apps.monetization_type, app_users.open_id, app_users.union_id, app_users.created_at").
 		Order("app_users.created_at DESC").
 		Offset((page - 1) * size).
 		Limit(size).
@@ -194,13 +196,14 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 	for i, r := range results {
 		idStr := fmt.Sprintf("%d", r.ID)
 		items[i] = AppUserListItem{
-			ID:        idStr,
-			UserID:    idStr,
-			AppID:     r.AppID,
-			AppName:   r.AppName,
-			OpenID:    r.OpenID,
-			UnionID:   r.UnionID,
-			CreatedAt: datetime.From(r.CreatedAt),
+			ID:               idStr,
+			UserID:           idStr,
+			AppID:            r.AppID,
+			AppName:          r.AppName,
+			MonetizationType: r.MonetizationType,
+			OpenID:           r.OpenID,
+			UnionID:          r.UnionID,
+			CreatedAt:        datetime.From(r.CreatedAt),
 		}
 	}
 

@@ -28,6 +28,7 @@ type AdSessionItem struct {
 	AttributionLinkID *string `json:"attributionLinkId"`
 	AppID             string  `json:"appId"`
 	AppName           string  `json:"appName"`
+	MonetizationType  string  `json:"monetizationType"`
 	DramaID           string  `json:"dramaId"`
 	DramaName         string  `json:"dramaName"`
 	EpisodeNo         int     `json:"episodeNo"`
@@ -52,6 +53,7 @@ type adSessionRow struct {
 	AttributionLinkID *int64
 	AppID             int64
 	AppName           string
+	MonetizationType  string
 	DramaID           int64
 	DramaName         string
 	EpisodeNo         int
@@ -92,7 +94,7 @@ func selectAdSessionItems(db *gorm.DB) ([]AdSessionItem, error) {
 	var rows []adSessionRow
 	if err := db.Select(`
 		sessions.id, sessions.session_no, sessions.user_id, sessions.attribution_link_id,
-		sessions.app_id, apps.name AS app_name, sessions.drama_id, dramas.name AS drama_name,
+		sessions.app_id, apps.name AS app_name, apps.monetization_type, sessions.drama_id, dramas.name AS drama_name,
 		sessions.episode_no, sessions.status, sessions.created_at, sessions.completed_at
 	`).Order("sessions.created_at DESC, sessions.id DESC").Scan(&rows).Error; err != nil {
 		return nil, err
@@ -106,6 +108,7 @@ func selectAdSessionItems(db *gorm.DB) ([]AdSessionItem, error) {
 			AttributionLinkID: promotionLinkIDString(row.AttributionLinkID),
 			AppID:             strconv.FormatInt(row.AppID, 10),
 			AppName:           row.AppName,
+			MonetizationType:  row.MonetizationType,
 			DramaID:           strconv.FormatInt(row.DramaID, 10),
 			DramaName:         row.DramaName,
 			EpisodeNo:         row.EpisodeNo,

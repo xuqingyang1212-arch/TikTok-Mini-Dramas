@@ -7,11 +7,12 @@ import { toast } from "@/lib/toast"
 import { useAppOptions } from "@/hooks/use-app-options"
 import { usePerm } from "@/components/admin-layout"
 import { PromotionOptionSelect } from "@/components/promotion-option-select"
+import { AppSelectFilter } from "@/components/app-select-filter"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagedQuery } from "@/hooks/use-paged-query"
 import { usePagination } from "@/hooks/use-pagination"
 import { ListPagination } from "@/components/list-pagination"
-import { ActionButton, CopyButton, ExportButton, FilterActions, FilterBar, FilterInput, FixedHeaderTable, FormInput, MonetizationBadge, RightDrawer, SelectFilter, thClass } from "@/components/shared"
+import { ActionButton, CopyButton, ExportButton, FilterActions, FilterBar, FilterInput, FixedHeaderTable, FormInput, MonetizationBadge, RightDrawer, thClass } from "@/components/shared"
 
 interface FilterForm {
   name: string
@@ -70,7 +71,8 @@ export default function CampaignLinkManagement() {
   const { draft, active, update, apply, reset } = useFilters(defaultFilters)
   const { page, pageSize, resetPage, paginationProps } = usePagination()
   const { options: apps, error: appError } = useAppOptions(1000)
-  const appOptions = apps.filter((app) => app.status !== "禁用").map((app) => ({
+  const enabledApps = apps.filter((app) => app.status !== "禁用")
+  const appOptions = enabledApps.map((app) => ({
     label: app.name,
     value: String(app.id),
     extra: <MonetizationBadge type={app.monetizationType} />,
@@ -216,7 +218,7 @@ export default function CampaignLinkManagement() {
         </FilterActions>
       }>
         <FilterInput block label="链接名称" placeholder="请输入" value={draft.name} onChange={(value) => update("name", value)} />
-        <SelectFilter block label="小程序" placeholder="全部" value={draft.appId} onChange={(value) => update("appId", value)} options={appOptions} />
+        <AppSelectFilter block label="小程序" placeholder="全部" value={draft.appId} onChange={(value) => update("appId", value)} apps={enabledApps} />
         <FilterInput block label="剧集" placeholder="请输入剧集ID或名称" value={draft.drama} onChange={(value) => update("drama", value)} />
         <FilterInput block label="Linkid" placeholder="请输入" value={draft.linkId} onChange={(value) => update("linkId", value)} />
       </FilterBar>

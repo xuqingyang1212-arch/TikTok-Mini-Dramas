@@ -1,9 +1,10 @@
 import { del, get, post, put } from "../api-client"
 import type { PageData } from "../types"
 import type { UserListQueryParams } from "./users"
+import type { MonetizationType } from "./apps"
 
 export interface SubscriptionPlanCreateDto { appId: number; period: string; applePrice: number; googlePrice: number; webDiscount: number; tierId: string }
-export interface SubscriptionPlanItem { id: string; appId: string; appName: string; period: string; applePrice: number; googlePrice: number; webDiscount: number; tierId: string }
+export interface SubscriptionPlanItem { id: string; appId: string; appName: string; monetizationType: MonetizationType; period: string; applePrice: number; googlePrice: number; webDiscount: number; tierId: string }
 export const subscriptionApi = {
   list: <T = SubscriptionPlanItem>(params?: UserListQueryParams) => get<PageData<T>>("/subscription-plans", params),
   getById: (id: string) => get<SubscriptionPlanItem>(`/subscription-plans/${id}`),

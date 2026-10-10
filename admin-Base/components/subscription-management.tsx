@@ -10,6 +10,8 @@ import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
 import { usePagedQuery } from "@/hooks/use-paged-query"
 import { useAppOptions } from "@/hooks/use-app-options"
+import { AppSelectFilter } from "@/components/app-select-filter"
+import { MonetizationBadge } from "@/components/shared"
 
 // ─────────────── Types ───────────────
 interface AppOption {
@@ -206,7 +208,7 @@ export default function SubscriptionManagement() {
   const { draft: draftFilters, active: appliedFilters, update: setDraftField, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
   const { page, pageSize, resetPage, paginationProps } = usePagination()
 
-  const { options: appOptionsRaw } = useAppOptions()
+  const { options: appOptionsRaw } = useAppOptions(1000)
   const appOptions: AppOption[] = appOptionsRaw.map((app) => ({ id: Number(app.id), name: app.name }))
 
   const [drawerMode, setDrawerMode] = useState<"add" | "edit" | null>(null)
@@ -316,13 +318,13 @@ export default function SubscriptionManagement() {
       <FilterBar
         actions={<FilterActions onQuery={handleQuery} onReset={handleReset} />}
       >
-        <SelectFilter
+        <AppSelectFilter
           block
           label="小程序"
           placeholder="全部"
           value={draftFilters.appId}
           onChange={(v) => setDraftField("appId", v)}
-          options={appOptions.map(a => ({ label: a.name, value: String(a.id) }))}
+          apps={appOptionsRaw}
         />
         <SelectFilter
           block
@@ -366,7 +368,12 @@ export default function SubscriptionManagement() {
       >
             {list.map((row) => (
               <tr key={row.id} className="border-b border-[#f3f4f6] hover:bg-[#f9fafb]/60">
-                <td className="px-4 py-3 text-[#374151]">{row.appName || "-"}</td>
+                <td className="px-4 py-3 text-[#374151]">
+                  <div className="flex items-center gap-2">
+                    <span>{row.appName || "-"}</span>
+                    <MonetizationBadge type={row.monetizationType} />
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-[#374151]">{periodLabels[row.period] || row.period}</td>
                 <td className="px-4 py-3 text-[#374151]">${row.applePrice?.toFixed(2) ?? "0.00"}</td>
                 <td className="px-4 py-3 text-[#374151]">${row.googlePrice?.toFixed(2) ?? "0.00"}</td>

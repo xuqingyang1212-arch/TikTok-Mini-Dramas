@@ -22,14 +22,15 @@ type SubscriptionPlanFilter struct {
 }
 
 type SubscriptionPlanItem struct {
-	ID          string  `json:"id"`
-	AppID       string  `json:"appId"`
-	AppName     string  `json:"appName"`
-	Period      string  `json:"period"`
-	ApplePrice  float64 `json:"applePrice"`
-	GooglePrice float64 `json:"googlePrice"`
-	WebDiscount int     `json:"webDiscount"`
-	TierID      string  `json:"tierId"`
+	ID               string  `json:"id"`
+	AppID            string  `json:"appId"`
+	AppName          string  `json:"appName"`
+	MonetizationType string  `json:"monetizationType"`
+	Period           string  `json:"period"`
+	ApplePrice       float64 `json:"applePrice"`
+	GooglePrice      float64 `json:"googlePrice"`
+	WebDiscount      int     `json:"webDiscount"`
+	TierID           string  `json:"tierId"`
 }
 
 type CreateSubscriptionPlanInput struct {
@@ -100,33 +101,39 @@ func (s *subscriptionService) List(f SubscriptionPlanFilter) ([]SubscriptionPlan
 		return nil, 0, err
 	}
 
-	// 批量获取App名称
+	// 批量获取 App 名称和变现类型
 	appIDs := make([]int64, 0, len(plans))
 	for _, p := range plans {
 		appIDs = append(appIDs, p.AppID)
 	}
-	appNames := make(map[int64]string)
+	type appMetadata struct {
+		Name             string
+		MonetizationType string
+	}
+	appMetadataByID := make(map[int64]appMetadata)
 	if len(appIDs) > 0 {
 		var apps []model.App
 		if err := s.db.Where("id IN ?", appIDs).Find(&apps).Error; err != nil {
 			return nil, 0, err
 		}
 		for _, a := range apps {
-			appNames[a.ID] = a.Name
+			appMetadataByID[a.ID] = appMetadata{Name: a.Name, MonetizationType: a.MonetizationType}
 		}
 	}
 
 	items := make([]SubscriptionPlanItem, len(plans))
 	for i, p := range plans {
+		app := appMetadataByID[p.AppID]
 		items[i] = SubscriptionPlanItem{
-			ID:          fmt.Sprintf("%d", p.ID),
-			AppID:       fmt.Sprintf("%d", p.AppID),
-			AppName:     appNames[p.AppID],
-			Period:      p.Period,
-			ApplePrice:  p.ApplePrice,
-			GooglePrice: p.GooglePrice,
-			WebDiscount: p.WebDiscount,
-			TierID:      p.TierID,
+			ID:               fmt.Sprintf("%d", p.ID),
+			AppID:            fmt.Sprintf("%d", p.AppID),
+			AppName:          app.Name,
+			MonetizationType: app.MonetizationType,
+			Period:           p.Period,
+			ApplePrice:       p.ApplePrice,
+			GooglePrice:      p.GooglePrice,
+			WebDiscount:      p.WebDiscount,
+			TierID:           p.TierID,
 		}
 	}
 	return items, total, nil
