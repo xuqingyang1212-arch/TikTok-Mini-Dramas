@@ -19,7 +19,13 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null)
 
 function isLocale(value: string | null): value is Locale {
-  return value === "zh" || value === "en"
+  return value === "zh" || value === "en" || value === "ja"
+}
+
+function getDocumentLanguage(locale: Locale) {
+  if (locale === "zh") return "zh-CN"
+  if (locale === "ja") return "ja-JP"
+  return "en"
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
@@ -31,7 +37,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"
+    document.documentElement.lang = getDocumentLanguage(locale)
   }, [locale])
 
   const setLocale = useCallback((nextLocale: Locale) => {

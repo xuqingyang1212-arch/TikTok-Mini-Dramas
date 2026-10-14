@@ -13,11 +13,13 @@ import { usePagination } from "@/hooks/use-pagination"
 import { usePagedQuery } from "@/hooks/use-paged-query"
 import { useEpisodeOperations, type EpisodeUploadStatus } from "@/hooks/use-episode-operations"
 import { usePerm } from "@/components/admin-layout"
+import { dramaLanguageOptions } from "@/lib/drama-options"
 
 // ─────────────── Types ───────────────
 interface DramaItem {
   id: string
   name: string
+  description: string
   coverUrl: string
   language: string
   episodeCount: number
@@ -36,6 +38,7 @@ interface FilterForm {
 
 interface DramaForm {
   name: string
+  description: string
   coverUrl: string
   language: string
   paywallEpisode: number
@@ -43,6 +46,7 @@ interface DramaForm {
 
 interface DramaFormErrors {
   name?: string
+  description?: string
   language?: string
   paywallEpisode?: string
 }
@@ -54,11 +58,6 @@ const defaultFilters: FilterForm = {
   status: "",
   createdAtRange: [],
 }
-
-const languageOptions = [
-  { label: "中文", value: "中文" },
-  { label: "英文", value: "英文" },
-]
 
 const statusOptions = [
   { label: "上架", value: "上架" },
@@ -241,8 +240,8 @@ function DramaDrawer({
   const isEdit = mode === "edit"
   const [form, setForm] = useState<DramaForm>(() => (
     isEdit && drama
-      ? { name: drama.name, coverUrl: drama.coverUrl, language: drama.language, paywallEpisode: drama.paywallEpisode || 2 }
-      : { name: "", coverUrl: "", language: "", paywallEpisode: 0 }
+      ? { name: drama.name, description: drama.description ?? "", coverUrl: drama.coverUrl, language: drama.language, paywallEpisode: drama.paywallEpisode || 2 }
+      : { name: "", description: "", coverUrl: "", language: "", paywallEpisode: 0 }
   ))
   const [errors, setErrors] = useState<DramaFormErrors>({})
   const [submitting, setSubmitting] = useState(false)
@@ -255,6 +254,7 @@ function DramaDrawer({
   function validate(): boolean {
     const errs: DramaFormErrors = {}
     if (!form.name.trim()) errs.name = "请输入剧集名称"
+    if (!form.description.trim()) errs.description = "请输入剧集简介"
     if (!form.language) errs.language = "请选择语种"
    if (form.paywallEpisode < 1) errs.paywallEpisode = "付费卡点必须大于0"
     // 编辑时，如果有集数，卡点不能超过总集数（不管上架还是下架）
@@ -293,6 +293,20 @@ function DramaDrawer({
             error={errors.name}
             required
           />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13px] font-medium text-[#374151]">剧集简介<span className="ml-0.5 text-[#f04438]">*</span></label>
+            <textarea
+              placeholder="请输入剧集简介"
+              value={form.description}
+              onChange={(event) => setField("description", event.target.value)}
+              rows={4}
+              className={cn(
+                "w-full resize-y rounded-[6px] border bg-white px-3 py-2 text-[13px] text-[#374151] outline-none transition-colors placeholder-[#9ca3af] focus:border-[#38c08f]",
+                errors.description ? "border-[#f04438]" : "border-[#d1d5db]"
+              )}
+            />
+            {errors.description && <p className="text-[12px] text-[#f04438]">{errors.description}</p>}
+          </div>
           <ImageUpload
             label="封面图"
             value={form.coverUrl}
@@ -302,7 +316,7 @@ function DramaDrawer({
             label="语种"
             value={form.language}
             onChange={(v) => setField("language", v)}
-            options={languageOptions}
+            options={dramaLanguageOptions}
             error={errors.language}
             required
           />
@@ -782,7 +796,7 @@ export default function DramaManagement() {
       >
         <FilterInput block label="剧集ID" placeholder="请输入" value={draftFilters.dramaId} onChange={(v) => updateDraft("dramaId", v)} />
         <FilterInput block label="剧集名称" placeholder="请输入" value={draftFilters.name} onChange={(v) => updateDraft("name", v)} />
-        <SelectFilter block label="语种" value={draftFilters.language} onChange={(v) => updateDraft("language", v)} options={languageOptions} placeholder="全部" />
+        <SelectFilter block label="语种" value={draftFilters.language} onChange={(v) => updateDraft("language", v)} options={dramaLanguageOptions} placeholder="全部" />
         <SelectFilter block label="状态" value={draftFilters.status} onChange={(v) => updateDraft("status", v)} options={statusOptions} placeholder="全部" />
         <DateRangePicker block label="创建时间" value={draftFilters.createdAtRange} onChange={(v) => updateDraft("createdAtRange", v)} />
       </FilterBar>

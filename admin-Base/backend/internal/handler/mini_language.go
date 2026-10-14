@@ -44,6 +44,8 @@ func parseMiniLanguage(header string) miniLanguagePreference {
 		switch {
 		case tag == "zh" || strings.HasPrefix(tag, "zh-"):
 			candidate = miniLanguagePreference{Locale: "zh-CN"}
+		case tag == "ja" || strings.HasPrefix(tag, "ja-"):
+			candidate = miniLanguagePreference{Locale: "ja-JP"}
 		case tag == "en" || strings.HasPrefix(tag, "en-"):
 			candidate = defaultMiniLanguage
 		default:

@@ -77,7 +77,7 @@ export function MultiSelectFilter({
         )}
       </button>
       {open && (
-        <div className="absolute left-0 top-[34px] z-50 min-w-full rounded-[6px] border border-[#e5e7eb] bg-white py-1 shadow-lg">
+        <div className="absolute left-0 top-[34px] z-50 max-h-72 min-w-full overflow-y-auto rounded-[6px] border border-[#e5e7eb] bg-white py-1 shadow-lg">
           {options.map((opt) => {
             const checked = value.includes(opt.value)
             return (

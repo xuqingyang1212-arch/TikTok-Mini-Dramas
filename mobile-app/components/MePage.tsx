@@ -24,7 +24,9 @@ function formatExpireAt(expireAt: string | undefined, locale: Locale) {
   const date = new Date(expireAt)
   if (Number.isNaN(date.getTime())) return expireAt
 
-  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+  return new Intl.DateTimeFormat(
+    locale === "zh" ? "zh-CN" : locale === "ja" ? "ja-JP" : "en-US",
+    {
     timeZone: getBrowserTimeZone(),
     year: "numeric",
     month: "long",
@@ -231,7 +233,7 @@ export function MePage({ userId, monetizationType, onOpenPurchaseRecords, onLogo
               {t("me.language")}
             </span>
             <span className="flex flex-shrink-0 items-center gap-1.5 text-[15px] font-medium text-[#ffc18a]">
-              {locale === "zh" ? t("language.chinese") : t("language.english")}
+              {locale === "zh" ? t("language.chinese") : locale === "ja" ? t("language.japanese") : t("language.english")}
               <ChevronRight size={20} className="text-[#ffad62]/65" />
             </span>
           </button>
@@ -285,7 +287,7 @@ export function MePage({ userId, monetizationType, onOpenPurchaseRecords, onLogo
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-white/[0.09] bg-white/[0.045]">
-              {(["zh", "en"] as const).map((optionLocale, index) => (
+              {(["zh", "en", "ja"] as const).map((optionLocale, index) => (
                 <button
                   key={optionLocale}
                   type="button"
@@ -295,7 +297,11 @@ export function MePage({ userId, monetizationType, onOpenPurchaseRecords, onLogo
                   }`}
                 >
                   <span className={locale === optionLocale ? "font-semibold text-white" : "text-white/72"}>
-                    {optionLocale === "zh" ? t("language.chinese") : t("language.english")}
+                    {optionLocale === "zh"
+                      ? t("language.chinese")
+                      : optionLocale === "ja"
+                        ? t("language.japanese")
+                        : t("language.english")}
                   </span>
                   {locale === optionLocale && (
                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#ff8a34] text-white">

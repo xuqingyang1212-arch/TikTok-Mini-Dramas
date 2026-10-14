@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"scaffold-admin/internal/pkg/response"
 	"scaffold-admin/internal/service"
 
@@ -59,6 +61,7 @@ func (a *Application) GetDrama(c *gin.Context) {
 
 type createDramaReq struct {
 	Name           string `json:"name" binding:"required"`
+	Description    string `json:"description" binding:"required"`
 	CoverURL       string `json:"coverUrl"`
 	Language       string `json:"language" binding:"required"`
 	PaywallEpisode int    `json:"paywallEpisode"`
@@ -71,6 +74,12 @@ func (a *Application) CreateDrama(c *gin.Context) {
 		return
 	}
 
+	if strings.TrimSpace(req.Description) == "" {
+		response.FailBadRequest(c, "请输入剧集简介")
+		return
+	}
+	req.Description = strings.TrimSpace(req.Description)
+
 	// 卡点必须>=1
 	paywallEp := req.PaywallEpisode
 	if paywallEp < 1 {
@@ -79,6 +88,7 @@ func (a *Application) CreateDrama(c *gin.Context) {
 
 	drama, err := a.services.Drama.Create(service.CreateDramaInput{
 		Name:           req.Name,
+		Description:    req.Description,
 		CoverURL:       req.CoverURL,
 		Language:       req.Language,
 		PaywallEpisode: paywallEp,
@@ -94,6 +104,7 @@ func (a *Application) CreateDrama(c *gin.Context) {
 
 type updateDramaReq struct {
 	Name           *string `json:"name"`
+	Description    *string `json:"description" binding:"required"`
 	CoverURL       *string `json:"coverUrl"`
 	Language       *string `json:"language"`
 	PaywallEpisode *int    `json:"paywallEpisode"`
@@ -111,6 +122,13 @@ func (a *Application) UpdateDrama(c *gin.Context) {
 		return
 	}
 
+	if req.Description == nil || strings.TrimSpace(*req.Description) == "" {
+		response.FailBadRequest(c, "请输入剧集简介")
+		return
+	}
+	description := strings.TrimSpace(*req.Description)
+	req.Description = &description
+
 	// 卡点校验：必须>=1
 	if req.PaywallEpisode != nil && *req.PaywallEpisode < 1 {
 		response.FailBadRequest(c, "付费卡点必须大于0")
@@ -119,6 +137,7 @@ func (a *Application) UpdateDrama(c *gin.Context) {
 
 	err := a.services.Drama.Update(id, service.UpdateDramaInput{
 		Name:           req.Name,
+		Description:    req.Description,
 		CoverURL:       req.CoverURL,
 		Language:       req.Language,
 		PaywallEpisode: req.PaywallEpisode,

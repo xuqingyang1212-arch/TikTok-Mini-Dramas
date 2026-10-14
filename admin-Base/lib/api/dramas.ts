@@ -2,11 +2,11 @@ import { del, get, post, put, uploadFile, uploadFileWithProgress } from "../api-
 import type { PageData } from "../types"
 import type { UserListQueryParams } from "./users"
 
-export interface DramaCreateDto { name: string; coverUrl: string; language: string; paywallEpisode: number }
+export interface DramaCreateDto { name: string; description: string; coverUrl: string; language: string; paywallEpisode: number }
 export interface EpisodeItem { id: string; dramaId: string; episodeNo: number; videoUrl: string; duration: number; fileSize: number }
 export const dramaApi = {
   list: <T = unknown>(params?: UserListQueryParams) => get<PageData<T>>("/dramas", params),
-  getById: (id: string) => get<{ id: string; name: string; coverUrl?: string }>(`/dramas/${id}`),
+  getById: (id: string) => get<{ id: string; name: string; description: string; coverUrl?: string }>(`/dramas/${id}`),
   create: (body: DramaCreateDto) => post<{ id?: string }>("/dramas", body),
   update: (id: string, body: DramaCreateDto) => put<{ id?: string }>(`/dramas/${id}`, body),
   toggleStatus: (id: string) => put<{ id: string }>(`/dramas/${id}/toggle-status`, {}),

@@ -61,9 +61,23 @@ func normalizeValue(value reflect.Value) any {
 	case reflect.Struct:
 		out := make(map[string]any)
 		typeInfo := value.Type()
+		// Match encoding/json: untagged anonymous structs are flattened, while
+		// explicitly tagged anonymous fields remain nested under their JSON name.
 		for i := 0; i < value.NumField(); i++ {
 			fieldInfo := typeInfo.Field(i)
-			if fieldInfo.PkgPath != "" {
+			if fieldInfo.PkgPath != "" || !fieldInfo.Anonymous || hasExplicitJSONName(fieldInfo) {
+				continue
+			}
+			fieldValue := value.Field(i)
+			if embedded, ok := normalizeValue(fieldValue).(map[string]any); ok {
+				for name, normalized := range embedded {
+					out[name] = normalized
+				}
+			}
+		}
+		for i := 0; i < value.NumField(); i++ {
+			fieldInfo := typeInfo.Field(i)
+			if fieldInfo.PkgPath != "" || (fieldInfo.Anonymous && !hasExplicitJSONName(fieldInfo)) {
 				continue
 			}
 			name, options := jsonField(fieldInfo)
@@ -99,6 +113,11 @@ func normalizeValue(value reflect.Value) any {
 	default:
 		return value.Interface()
 	}
+}
+
+func hasExplicitJSONName(field reflect.StructField) bool {
+	tag := field.Tag.Get("json")
+	return tag != "" && strings.Split(tag, ",")[0] != ""
 }
 
 func jsonField(field reflect.StructField) (string, map[string]bool) {

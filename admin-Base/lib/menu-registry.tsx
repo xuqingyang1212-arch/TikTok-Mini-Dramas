@@ -93,6 +93,12 @@ export const menuRegistry: RegistryBranch[] = [
         permission: "resource.drama.list",
         component: lazyPage(() => import("@/components/drama-management")),
       },
+      {
+        key: "dramaSubmission",
+        label: "剧目提审",
+        permission: "resource.drama-submission.list",
+        component: lazyPage(() => import("@/components/drama-submission-management")),
+      },
     ],
   },
 

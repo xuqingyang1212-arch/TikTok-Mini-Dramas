@@ -40,10 +40,12 @@ export function getAcceptLanguageHeader(): string {
   if (typeof window === "undefined") return "zh-CN"
 
   const savedLocale = window.localStorage.getItem("mini_drama_language")
-  if (savedLocale === "en") return "en-US"
   if (savedLocale === "zh") return "zh-CN"
+  if (savedLocale === "ja") return "ja-JP"
+  if (savedLocale === "en") return "en-US"
 
   const docLang = document.documentElement.lang || navigator.language || "zh-CN"
+  if (docLang.toLowerCase().startsWith("ja")) return "ja-JP"
   return docLang.toLowerCase().startsWith("en") ? "en-US" : "zh-CN"
 }
 

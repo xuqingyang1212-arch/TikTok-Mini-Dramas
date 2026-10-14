@@ -42,11 +42,13 @@ function getBrowserTimeZone() {
 
 function formatPaidAt(paidAt: string, locale: Locale) {
   const date = new Date(paidAt)
+  const localeTag = locale === "zh" ? "zh-CN" : locale === "ja" ? "ja-JP" : "en-US"
+  const month = locale === "zh" ? "numeric" : "short"
   if (!Number.isNaN(date.getTime())) {
-    return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    return new Intl.DateTimeFormat(localeTag, {
       timeZone: getBrowserTimeZone(),
       year: "numeric",
-      month: locale === "zh" ? "numeric" : "short",
+      month,
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
@@ -57,19 +59,23 @@ function formatPaidAt(paidAt: string, locale: Locale) {
   const matched = paidAt.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/)
   if (!matched) return paidAt
 
-  const [, year, month, day, hour, minute] = matched
+  const [, year, monthValue, day, hour, minute] = matched
   if (locale === "zh") {
-    return `${year}年${Number(month)}月${Number(day)}日 ${hour}:${minute}`
+    return `${year}年${Number(monthValue)}月${Number(day)}日 ${hour}:${minute}`
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  if (locale === "ja") {
+    return `${year}年${Number(monthValue)}月${Number(day)}日 ${hour}:${minute}`
+  }
+
+  return new Intl.DateTimeFormat(localeTag, {
     timeZone: getBrowserTimeZone(),
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)))
+  }).format(new Date(Number(year), Number(monthValue) - 1, Number(day), Number(hour), Number(minute)))
 }
 
 function formatEpisodes(episodes: number[], locale: Locale) {
@@ -92,7 +98,7 @@ function formatEpisodes(episodes: number[], locale: Locale) {
     end = current
   }
 
-  return ranges.join(locale === "zh" ? "、" : ", ")
+  return ranges.join(locale === "zh" || locale === "ja" ? "、" : ", ")
 }
 
 function PurchaseTime({ paidAt }: { paidAt: string }) {

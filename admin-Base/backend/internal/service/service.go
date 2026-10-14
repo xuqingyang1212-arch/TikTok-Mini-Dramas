@@ -14,6 +14,7 @@ type Services struct {
 	AppUser          AppUserService
 	Drama            DramaService
 	Episode          EpisodeService
+	DramaSubmission  DramaSubmissionService
 	Mini             MiniService
 	AdUnlock         AdUnlockService
 	PaymentConfig    PaymentConfigService
@@ -37,6 +38,7 @@ func New(db *gorm.DB) *Services {
 		AppUser:          &appUserService{db: db},
 		Drama:            &dramaService{db: db},
 		Episode:          &episodeService{db: db},
+		DramaSubmission:  &dramaSubmissionService{db: db},
 		Mini:             &miniService{db: db, payment: miniPayment, entitlements: entitlements},
 		AdUnlock:         &adUnlockService{db: db, entitlements: entitlements},
 		PaymentConfig:    paymentConfig,

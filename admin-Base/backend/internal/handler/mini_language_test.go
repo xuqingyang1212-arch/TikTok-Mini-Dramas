@@ -15,7 +15,8 @@ func TestParseMiniLanguage(t *testing.T) {
 		{name: "supported fallback in list", header: "fr-FR, zh-CN;q=0.9", wantLocale: "zh-CN"},
 		{name: "quality takes priority", header: "zh-CN;q=0.5, en-US;q=0.9", wantLocale: "en-US"},
 		{name: "zero quality is ignored", header: "zh;q=0", wantLocale: "en-US"},
-		{name: "unsupported defaults to English", header: "ja-JP", wantLocale: "en-US"},
+		{name: "Japanese regional tag", header: "ja-JP", wantLocale: "ja-JP"},
+		{name: "unsupported defaults to English", header: "fr-FR", wantLocale: "en-US"},
 	}
 
 	for _, tt := range tests {

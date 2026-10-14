@@ -29,6 +29,7 @@ type DramaListFilter struct {
 type DramaListItem struct {
 	ID             string        `json:"id"`
 	Name           string        `json:"name"`
+	Description    string        `json:"description"`
 	CoverURL       string        `json:"coverUrl"`
 	Language       string        `json:"language"`
 	EpisodeCount   int           `json:"episodeCount"`
@@ -39,6 +40,7 @@ type DramaListItem struct {
 
 type CreateDramaInput struct {
 	Name           string
+	Description    string
 	CoverURL       string
 	Language       string
 	PaywallEpisode int
@@ -46,6 +48,7 @@ type CreateDramaInput struct {
 
 type UpdateDramaInput struct {
 	Name           *string
+	Description    *string
 	CoverURL       *string
 	Language       *string
 	Status         *string
@@ -120,6 +123,7 @@ func (s *dramaService) List(f DramaListFilter) ([]DramaListItem, int64, error) {
 		items[i] = DramaListItem{
 			ID:             fmt.Sprintf("%d", d.ID),
 			Name:           d.Name,
+			Description:    d.Description,
 			CoverURL:       d.CoverURL,
 			Language:       d.Language,
 			EpisodeCount:   d.EpisodeCount,
@@ -150,6 +154,7 @@ func (s *dramaService) Create(in CreateDramaInput) (*model.Drama, error) {
 	drama := model.Drama{
 		ID:             snowflake.NextID(),
 		Name:           in.Name,
+		Description:    in.Description,
 		CoverURL:       in.CoverURL,
 		Language:       in.Language,
 		PaywallEpisode: paywallEp,
@@ -170,6 +175,9 @@ func (s *dramaService) Update(id int64, in UpdateDramaInput) error {
 	updates := map[string]interface{}{}
 	if in.Name != nil {
 		updates["name"] = *in.Name
+	}
+	if in.Description != nil {
+		updates["description"] = *in.Description
 	}
 	if in.CoverURL != nil {
 		updates["cover_url"] = *in.CoverURL

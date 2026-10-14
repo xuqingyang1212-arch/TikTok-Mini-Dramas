@@ -31,6 +31,13 @@ const (
 	ResourceDramaEdit = "resource.drama.edit"
 
 	// ═══════════════════════════════════════════════════════════════════════
+	// 资源管理 · 剧目提审
+	// ═══════════════════════════════════════════════════════════════════════
+	ResourceDramaSubmissionList   = "resource.drama-submission.list"
+	ResourceDramaSubmissionAdd    = "resource.drama-submission.add"
+	ResourceDramaSubmissionReview = "resource.drama-submission.review"
+
+	// ═══════════════════════════════════════════════════════════════════════
 	// 推广管理 · 推广链接
 	// ═══════════════════════════════════════════════════════════════════════
 	CampaignLinkList         = "campaign.link.list"
@@ -106,6 +113,15 @@ var PermissionTree = []PermissionNode{
 					{Key: ResourceDramaList, Label: "列表数据"},
 					{Key: ResourceDramaAdd, Label: "新增"},
 					{Key: ResourceDramaEdit, Label: "编辑"},
+				},
+			},
+			{
+				Key:   "resource.drama-submission",
+				Label: "剧目提审",
+				Children: []PermissionNode{
+					{Key: ResourceDramaSubmissionList, Label: "列表数据"},
+					{Key: ResourceDramaSubmissionAdd, Label: "新增"},
+					{Key: ResourceDramaSubmissionReview, Label: "模拟审核"},
 				},
 			},
 		},

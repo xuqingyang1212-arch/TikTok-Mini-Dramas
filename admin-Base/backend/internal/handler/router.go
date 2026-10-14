@@ -91,6 +91,21 @@ func SetupRouter(mode string, services *service.Services, db *gorm.DB) *gin.Engi
 		auth.PUT("/dramas/:id", perm(consts.ResourceDramaEdit), app.UpdateDrama)
 		auth.PUT("/dramas/:id/toggle-status", perm(consts.ResourceDramaEdit), app.ToggleDramaStatus)
 
+		// --- Drama Submission Management (剧目提审) ---
+		auth.GET("/drama-submissions", perm(consts.ResourceDramaSubmissionList), app.ListDramaSubmissions)
+		auth.GET("/drama-submissions/eligible-dramas", perm(consts.ResourceDramaSubmissionAdd), app.ListEligibleSubmissionDramas)
+		auth.GET("/drama-submissions/:albumId", perm(consts.ResourceDramaSubmissionList), app.GetDramaSubmission)
+		auth.GET("/drama-submissions/:albumId/versions/:version", perm(consts.ResourceDramaSubmissionList), app.GetDramaSubmissionVersion)
+		auth.POST("/drama-submissions", perm(consts.ResourceDramaSubmissionAdd), app.CreateDramaSubmission)
+		auth.PUT("/drama-submissions/:albumId/resubmit", perm(consts.ResourceDramaSubmissionAdd), app.ResubmitDramaSubmission)
+		auth.PUT("/drama-submissions/:albumId/versions/:version/media/:mediaId/retry", perm(consts.ResourceDramaSubmissionAdd), app.RetryDramaSubmissionMedia)
+		auth.PUT("/drama-submissions/:albumId/versions/:version/media/:mediaId/simulate-success", perm(consts.ResourceDramaSubmissionAdd), app.SimulateDramaSubmissionMediaSuccess)
+		auth.PUT("/drama-submissions/:albumId/versions/:version/media/:mediaId/simulate-failure", perm(consts.ResourceDramaSubmissionAdd), app.SimulateDramaSubmissionMediaFailure)
+		auth.PUT("/drama-submissions/:albumId/versions/:version/continue", perm(consts.ResourceDramaSubmissionAdd), app.ContinueDramaSubmissionVersion)
+		auth.PUT("/drama-submissions/:albumId/withdraw", perm(consts.ResourceDramaSubmissionReview), app.WithdrawDramaSubmission)
+		auth.PUT("/drama-submissions/:albumId/simulate-review", perm(consts.ResourceDramaSubmissionReview), app.SimulateDramaSubmissionReview)
+		auth.PUT("/drama-submissions/:albumId/toggle-publish-status", perm(consts.ResourceDramaSubmissionReview), app.ToggleDramaSubmissionPublishStatus)
+
 		// --- Episode Management (单集管理) ---
 		auth.GET("/dramas/:id/episodes", perm(consts.ResourceDramaList), app.ListEpisodes)
 		auth.POST("/dramas/:id/episodes", perm(consts.ResourceDramaEdit), app.BatchCreateEpisodes)
