@@ -178,6 +178,10 @@ func (a *Application) ToggleDramaStatus(c *gin.Context) {
 		response.FailBadRequest(c, "付费卡点超过总集数，不可上架")
 		return
 	}
+	if err == service.ErrDramaSubmissionNotOnline {
+		response.FailBadRequest(c, "该剧目尚未完成提审上架，不可上架")
+		return
+	}
 	if err != nil {
 		response.FailServer(c, "操作失败")
 		return

@@ -95,6 +95,8 @@ func SetupRouter(mode string, services *service.Services, db *gorm.DB) *gin.Engi
 		auth.GET("/drama-submissions", perm(consts.ResourceDramaSubmissionList), app.ListDramaSubmissions)
 		auth.GET("/drama-submissions/eligible-dramas", perm(consts.ResourceDramaSubmissionAdd), app.ListEligibleSubmissionDramas)
 		auth.GET("/drama-submissions/:albumId", perm(consts.ResourceDramaSubmissionList), app.GetDramaSubmission)
+		auth.GET("/drama-submissions/:albumId/authorizations", perm(consts.ResourceDramaSubmissionList), app.GetDramaSubmissionAuthorizations)
+		auth.PUT("/drama-submissions/:albumId/authorizations", perm(consts.ResourceDramaSubmissionAuthorize), app.UpdateDramaSubmissionAuthorizations)
 		auth.GET("/drama-submissions/:albumId/versions/:version", perm(consts.ResourceDramaSubmissionList), app.GetDramaSubmissionVersion)
 		auth.POST("/drama-submissions", perm(consts.ResourceDramaSubmissionAdd), app.CreateDramaSubmission)
 		auth.PUT("/drama-submissions/:albumId/resubmit", perm(consts.ResourceDramaSubmissionAdd), app.ResubmitDramaSubmission)

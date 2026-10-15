@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Database  DatabaseConfig  `yaml:"database"`
-	JWT       JWTConfig       `yaml:"jwt"`
-	Demo      DemoConfig      `yaml:"demo"`
-	Promotion PromotionConfig `yaml:"promotion"`
-	Storage   StorageConfig   `yaml:"storage"`
+	Server          ServerConfig              `yaml:"server"`
+	Database        DatabaseConfig            `yaml:"database"`
+	JWT             JWTConfig                 `yaml:"jwt"`
+	Demo            DemoConfig                `yaml:"demo"`
+	DramaSubmission DemoDramaSubmissionConfig `yaml:"drama_submission"`
+	Promotion       PromotionConfig           `yaml:"promotion"`
+	Storage         StorageConfig             `yaml:"storage"`
 }
 
 type ServerConfig struct {
@@ -46,6 +47,18 @@ type DemoConfig struct {
 	AutoLogin       bool   `yaml:"auto_login"`
 	AutoPayment     bool   `yaml:"auto_payment"`
 	FixedVerifyCode string `yaml:"fixed_verify_code"`
+}
+
+type DemoDramaSubmissionConfig struct {
+	SourceTikTokAppID string `yaml:"source_tiktok_app_id"`
+}
+
+// DramaSubmissionSourceTikTokAppID returns the configured submission source app.
+func DramaSubmissionSourceTikTokAppID() string {
+	if value := Global.DramaSubmission.SourceTikTokAppID; value != "" {
+		return value
+	}
+	return "tt60ac80b7ca957b06"
 }
 
 type PromotionConfig struct {

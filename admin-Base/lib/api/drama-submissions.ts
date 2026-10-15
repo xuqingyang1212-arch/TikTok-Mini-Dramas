@@ -1,3 +1,4 @@
+import type { MonetizationType } from "./apps"
 import { get, post, put } from "../api-client"
 import type { PageData } from "../types"
 
@@ -17,6 +18,20 @@ export interface DramaSubmissionListItem {
   reviewStatus: DramaSubmissionReviewStatus
   publishStatus: DramaSubmissionPublishStatus
   workflowStatus: DramaSubmissionWorkflowStatus
+}
+
+export interface DramaSubmissionAuthorizationItem {
+  appId: string
+  appName: string
+  monetizationType: MonetizationType
+  isSourceApp: boolean
+  authorized: boolean
+  authorizationError?: string
+}
+
+export interface DramaSubmissionAuthorizationDetail {
+  albumId: string
+  apps: DramaSubmissionAuthorizationItem[]
 }
 
 export interface EligibleDramaItem {
@@ -66,6 +81,7 @@ export interface DramaSubmissionDetail {
   dramaId: string
   appId: string
   currentVersion: number
+  onlineVersion: number
   publishStatus: DramaSubmissionPublishStatus
   versions: DramaSubmissionVersionItem[]
 }
@@ -78,8 +94,6 @@ export interface DramaSubmissionEpisodeItem {
   uploadStatus: DramaSubmissionUploadStatus
   jobId: string
   vid: string
-  reviewStatus: DramaSubmissionReviewStatus
-  rejectionReason: string
   uploadError: string
   retryCount: number
   lastAttemptAt?: string
@@ -111,6 +125,8 @@ export const dramaSubmissionApi = {
   versionDetail: (albumId: string, version: number) => get<DramaSubmissionVersionDetail>(`/drama-submissions/${albumId}/versions/${version}`),
   resubmit: (albumId: string, body: DramaSubmissionCreateDto) => put<DramaSubmissionListItem>(`/drama-submissions/${albumId}/resubmit`, body),
   withdraw: (albumId: string) => put<void>(`/drama-submissions/${albumId}/withdraw`, {}),
+  authorizations: (albumId: string) => get<DramaSubmissionAuthorizationDetail>(`/drama-submissions/${albumId}/authorizations`),
+  updateAuthorizations: (albumId: string, appIds: string[]) => put<DramaSubmissionAuthorizationDetail>(`/drama-submissions/${albumId}/authorizations`, { appIds }),
   simulateReview: (albumId: string, reviewStatus: 2 | 3) =>
     put<void>(`/drama-submissions/${albumId}/simulate-review`, { reviewStatus }),
   retryMedia: (albumId: string, version: number, mediaId: string) =>

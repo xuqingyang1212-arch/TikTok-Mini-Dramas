@@ -10,6 +10,7 @@ import (
 	"scaffold-admin/internal/pkg/snowflake"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -66,9 +67,10 @@ type DramaService interface {
 // ─── Errors ─────────────────────────────────────────────────────────────────
 
 var (
-	ErrDramaNotFound          = errors.New("drama not found")
-	ErrDramaNoEpisodes        = errors.New("cannot publish drama without episodes")
-	ErrDramaPaywallExceedsEps = errors.New("paywall episode exceeds total episodes")
+	ErrDramaNotFound            = errors.New("drama not found")
+	ErrDramaNoEpisodes          = errors.New("cannot publish drama without episodes")
+	ErrDramaPaywallExceedsEps   = errors.New("paywall episode exceeds total episodes")
+	ErrDramaSubmissionNotOnline = errors.New("drama submission is not online")
 )
 
 // ─── Implementation ─────────────────────────────────────────────────────────
@@ -207,23 +209,37 @@ func (s *dramaService) Update(id int64, in UpdateDramaInput) error {
 }
 
 func (s *dramaService) ToggleStatus(id int64) error {
-	drama, err := s.GetByID(id)
-	if err != nil {
-		return err
-	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var submission model.DramaSubmission
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("drama_id = ?", id).First(&submission).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDramaSubmissionNotOnline
+			}
+			return err
+		}
 
-	newStatus := "上架"
-	if drama.Status == "上架" {
-		newStatus = "下架"
-	} else {
-		// 上架时检查总集数
-		if drama.EpisodeCount == 0 {
-			return ErrDramaNoEpisodes
+		var drama model.Drama
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&drama, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDramaNotFound
+			}
+			return err
 		}
-		// 上架时检查付费卡点不超过总集数
-		if drama.PaywallEpisode > drama.EpisodeCount {
-			return ErrDramaPaywallExceedsEps
+
+		newStatus := "上架"
+		if drama.Status == "上架" {
+			newStatus = "下架"
+		} else {
+			if drama.EpisodeCount == 0 {
+				return ErrDramaNoEpisodes
+			}
+			if drama.PaywallEpisode > drama.EpisodeCount {
+				return ErrDramaPaywallExceedsEps
+			}
+			if submission.PublishStatus != model.DramaPublishOnline {
+				return ErrDramaSubmissionNotOnline
+			}
 		}
-	}
-	return s.db.Model(drama).Update("status", newStatus).Error
+		return tx.Model(&drama).Update("status", newStatus).Error
+	})
 }

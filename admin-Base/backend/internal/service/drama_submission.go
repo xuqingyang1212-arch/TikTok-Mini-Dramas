@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"scaffold-admin/internal/config"
 	"scaffold-admin/internal/model"
 	"scaffold-admin/internal/pkg/datetime"
 	"scaffold-admin/internal/pkg/snowflake"
@@ -36,6 +37,7 @@ var (
 	ErrDramaSubmissionInvalidState      = errors.New("invalid drama submission state")
 	ErrDramaSubmissionNoApprovedVersion = errors.New("drama submission has no approved version")
 	ErrDramaSubmissionUploadIncomplete  = errors.New("drama submission upload incomplete")
+	ErrDramaSubmissionInvalidApp        = errors.New("invalid drama submission authorization app")
 )
 
 type DramaSubmissionListFilter struct {
@@ -115,24 +117,23 @@ type DramaSubmissionDetail struct {
 	DramaID        string                       `json:"dramaId"`
 	AppID          string                       `json:"appId"`
 	CurrentVersion int                          `json:"currentVersion"`
+	OnlineVersion  int                          `json:"onlineVersion"`
 	PublishStatus  int                          `json:"publishStatus"`
 	Versions       []DramaSubmissionVersionItem `json:"versions"`
 }
 
 type DramaSubmissionEpisodeItem struct {
-	MediaID         string         `json:"mediaId"`
-	EpisodeID       string         `json:"episodeId"`
-	EpisodeNo       int            `json:"episodeNo"`
-	SourceURL       string         `json:"sourceUrl"`
-	UploadStatus    string         `json:"uploadStatus"`
-	JobID           string         `json:"jobId"`
-	VID             string         `json:"vid"`
-	ReviewStatus    int            `json:"reviewStatus"`
-	RejectionReason string         `json:"rejectionReason"`
-	UploadError     string         `json:"uploadError"`
-	RetryCount      int            `json:"retryCount"`
-	LastAttemptAt   *datetime.Time `json:"lastAttemptAt"`
-	Reused          bool           `json:"reused"`
+	MediaID       string         `json:"mediaId"`
+	EpisodeID     string         `json:"episodeId"`
+	EpisodeNo     int            `json:"episodeNo"`
+	SourceURL     string         `json:"sourceUrl"`
+	UploadStatus  string         `json:"uploadStatus"`
+	JobID         string         `json:"jobId"`
+	VID           string         `json:"vid"`
+	UploadError   string         `json:"uploadError"`
+	RetryCount    int            `json:"retryCount"`
+	LastAttemptAt *datetime.Time `json:"lastAttemptAt"`
+	Reused        bool           `json:"reused"`
 }
 
 type DramaSubmissionVersionDetail struct {
@@ -142,12 +143,28 @@ type DramaSubmissionVersionDetail struct {
 	Episodes []DramaSubmissionEpisodeItem `json:"episodes"`
 }
 
+type DramaSubmissionAuthorizationItem struct {
+	AppID              string `json:"appId"`
+	AppName            string `json:"appName"`
+	MonetizationType   string `json:"monetizationType"`
+	IsSourceApp        bool   `json:"isSourceApp"`
+	Authorized         bool   `json:"authorized"`
+	AuthorizationError string `json:"authorizationError,omitempty"`
+}
+
+type DramaSubmissionAuthorizationDetail struct {
+	AlbumID string                             `json:"albumId"`
+	Apps    []DramaSubmissionAuthorizationItem `json:"apps"`
+}
+
 type DramaSubmissionService interface {
 	List(filter DramaSubmissionListFilter) ([]DramaSubmissionListItem, int64, error)
 	ListEligibleDramas(filter EligibleDramaListFilter) ([]EligibleDramaListItem, int64, error)
 	Create(input CreateDramaSubmissionInput) (*DramaSubmissionListItem, error)
 	GetDetail(albumID int64) (*DramaSubmissionDetail, error)
 	GetVersionDetail(albumID int64, version int) (*DramaSubmissionVersionDetail, error)
+	GetAuthorizations(albumID int64) (*DramaSubmissionAuthorizationDetail, error)
+	UpdateAuthorizations(albumID int64, targetAppIDs []string) (*DramaSubmissionAuthorizationDetail, error)
 	Resubmit(albumID int64, input CreateDramaSubmissionInput) (*DramaSubmissionListItem, error)
 	RetryMedia(albumID int64, version int, mediaID int64) error
 	SimulateMediaSuccess(albumID int64, version int, mediaID int64) error
@@ -159,11 +176,12 @@ type DramaSubmissionService interface {
 }
 
 type dramaSubmissionService struct {
-	db *gorm.DB
+	db            *gorm.DB
+	authorization *dramaAuthorizationService
 }
 
 func (s *dramaSubmissionService) List(f DramaSubmissionListFilter) ([]DramaSubmissionListItem, int64, error) {
-	db := s.db.Table("drama_submissions AS submissions").Joins("JOIN dramas AS dramas ON dramas.id = submissions.drama_id").Joins("JOIN drama_submission_versions AS versions ON versions.album_id = submissions.album_id AND versions.version = submissions.version")
+	db := s.db.Table("drama_submissions AS submissions").Joins("JOIN dramas AS dramas ON dramas.id = submissions.drama_id").Joins("JOIN apps AS apps ON apps.id = submissions.source_app_id").Joins("JOIN drama_submission_versions AS versions ON versions.album_id = submissions.album_id AND versions.version = submissions.version")
 	if f.AlbumID != "" {
 		db = db.Where("submissions.album_id = ?", f.AlbumID)
 	}
@@ -207,7 +225,7 @@ func (s *dramaSubmissionService) List(f DramaSubmissionListFilter) ([]DramaSubmi
 	}
 	page, size := normalizePage(f.Page, f.PageSize)
 	var rows []row
-	if err := db.Select("submissions.album_id, submissions.app_id, versions.submitted_name, submissions.drama_id, dramas.episode_count, submissions.version, submissions.created_at, versions.review_status, submissions.publish_status, versions.workflow_status").Order("submissions.created_at DESC").Offset((page - 1) * size).Limit(size).Scan(&rows).Error; err != nil {
+	if err := db.Select("submissions.album_id, apps.app_id, versions.submitted_name, submissions.drama_id, dramas.episode_count, submissions.version, submissions.created_at, versions.review_status, submissions.publish_status, versions.workflow_status").Order("submissions.created_at DESC").Offset((page - 1) * size).Limit(size).Scan(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	items := make([]DramaSubmissionListItem, len(rows))
@@ -287,7 +305,11 @@ func (s *dramaSubmissionService) Create(in CreateDramaSubmissionInput) (*DramaSu
 		if existing > 0 {
 			return ErrDramaAlreadySubmitted
 		}
-		submission := model.DramaSubmission{AlbumID: snowflake.NextID(), AppID: model.DramaSubmissionAppID, DramaID: drama.ID, SubmittedName: in.SubmittedName, Language: in.Language, Year: in.Year, Description: in.Description, DramaType: in.DramaType, TagList: append([]int(nil), in.TagList...), Version: 1, AlbumStatus: model.DramaAlbumCompleted, ReviewID: snowflake.NextID(), ReviewStatus: model.DramaReviewUnsubmitted, PublishStatus: model.DramaPublishOffline}
+		var sourceApp model.App
+		if err := tx.Where("app_id = ?", config.DramaSubmissionSourceTikTokAppID()).First(&sourceApp).Error; err != nil {
+			return fmt.Errorf("load drama submission source app: %w", err)
+		}
+		submission := model.DramaSubmission{AlbumID: snowflake.NextID(), SourceAppID: sourceApp.ID, DramaID: drama.ID, SubmittedName: in.SubmittedName, Language: in.Language, Year: in.Year, Description: in.Description, DramaType: in.DramaType, TagList: append([]int(nil), in.TagList...), Version: 1, AlbumStatus: model.DramaAlbumCompleted, PublishStatus: model.DramaPublishOffline}
 		version := submissionVersionFromInput(submission, in)
 		media := buildSubmissionMedia(submission.AlbumID, 1, in.CoverURL, episodes, nil)
 		version.WorkflowStatus = initialWorkflowState(media)
@@ -296,8 +318,6 @@ func (s *dramaSubmissionService) Create(in CreateDramaSubmissionInput) (*DramaSu
 			version.ReviewStatus = model.DramaReviewPending
 			version.RemoteVersion = version.Version
 			version.SubmittedAt = &now
-			submission.ReviewStatus = model.DramaReviewPending
-			setSubmissionMediaReviewStatus(media, model.DramaReviewPending)
 		}
 		if err := tx.Create(&submission).Error; err != nil {
 			if isDuplicate(err) {
@@ -311,7 +331,7 @@ func (s *dramaSubmissionService) Create(in CreateDramaSubmissionInput) (*DramaSu
 		if err := tx.Create(&media).Error; err != nil {
 			return err
 		}
-		result = dramaSubmissionListItem(submission.AlbumID, submission.AppID, submission.SubmittedName, submission.DramaID, drama.EpisodeCount, 1, submission.CreatedAt, submission.ReviewStatus, submission.PublishStatus, version.WorkflowStatus)
+		result = dramaSubmissionListItem(submission.AlbumID, sourceApp.TiktokAppID, submission.SubmittedName, submission.DramaID, drama.EpisodeCount, 1, submission.CreatedAt, version.ReviewStatus, submission.PublishStatus, version.WorkflowStatus)
 		return nil
 	})
 	if err != nil {
@@ -336,7 +356,11 @@ func (s *dramaSubmissionService) GetDetail(albumID int64) (*DramaSubmissionDetai
 	for i, version := range versions {
 		items[i] = dramaSubmissionVersionItem(version)
 	}
-	return &DramaSubmissionDetail{AlbumID: strconv.FormatInt(submission.AlbumID, 10), DramaID: strconv.FormatInt(submission.DramaID, 10), AppID: submission.AppID, CurrentVersion: submission.Version, PublishStatus: submission.PublishStatus, Versions: items}, nil
+	var sourceApp model.App
+	if err := s.db.Select("app_id").First(&sourceApp, submission.SourceAppID).Error; err != nil {
+		return nil, err
+	}
+	return &DramaSubmissionDetail{AlbumID: strconv.FormatInt(submission.AlbumID, 10), DramaID: strconv.FormatInt(submission.DramaID, 10), AppID: sourceApp.TiktokAppID, CurrentVersion: submission.Version, OnlineVersion: submission.OnlineVersion, PublishStatus: submission.PublishStatus, Versions: items}, nil
 }
 
 func (s *dramaSubmissionService) GetVersionDetail(albumID int64, versionNumber int) (*DramaSubmissionVersionDetail, error) {
@@ -360,9 +384,17 @@ func (s *dramaSubmissionService) GetVersionDetail(albumID int64, versionNumber i
 	}
 	episodes := make([]DramaSubmissionEpisodeItem, len(media))
 	for i, item := range media {
-		episodes[i] = DramaSubmissionEpisodeItem{MediaID: strconv.FormatInt(item.ID, 10), EpisodeID: strconv.FormatInt(item.EpisodeID, 10), EpisodeNo: item.EpisodeNo, SourceURL: item.SourceURL, UploadStatus: item.UploadStatus, JobID: item.JobID, VID: item.VID, ReviewStatus: item.ReviewStatus, RejectionReason: item.RejectionReason, UploadError: item.UploadError, RetryCount: item.RetryCount, LastAttemptAt: optionalDateTime(item.LastAttemptAt), Reused: item.SourceMediaID > 0}
+		episodes[i] = DramaSubmissionEpisodeItem{MediaID: strconv.FormatInt(item.ID, 10), EpisodeID: strconv.FormatInt(item.EpisodeID, 10), EpisodeNo: item.EpisodeNo, SourceURL: item.SourceURL, UploadStatus: item.UploadStatus, JobID: item.JobID, VID: item.VID, UploadError: item.UploadError, RetryCount: item.RetryCount, LastAttemptAt: optionalDateTime(item.LastAttemptAt), Reused: item.SourceMediaID > 0}
 	}
 	return &DramaSubmissionVersionDetail{DramaSubmissionVersionItem: dramaSubmissionVersionItem(version), AlbumID: strconv.FormatInt(albumID, 10), DramaID: strconv.FormatInt(submission.DramaID, 10), Episodes: episodes}, nil
+}
+
+func (s *dramaSubmissionService) GetAuthorizations(albumID int64) (*DramaSubmissionAuthorizationDetail, error) {
+	return s.authorization.GetDetail(albumID)
+}
+
+func (s *dramaSubmissionService) UpdateAuthorizations(albumID int64, targetAppIDs []string) (*DramaSubmissionAuthorizationDetail, error) {
+	return s.authorization.SyncSelection(albumID, targetAppIDs)
 }
 
 func (s *dramaSubmissionService) Resubmit(albumID int64, in CreateDramaSubmissionInput) (*DramaSubmissionListItem, error) {
@@ -418,7 +450,6 @@ func (s *dramaSubmissionService) Resubmit(albumID int64, in CreateDramaSubmissio
 			version.ReviewStatus = model.DramaReviewPending
 			version.RemoteVersion = targetVersion
 			version.SubmittedAt = &now
-			setSubmissionMediaReviewStatus(media, model.DramaReviewPending)
 		}
 		if err := tx.Create(&version).Error; err != nil {
 			return err
@@ -426,11 +457,15 @@ func (s *dramaSubmissionService) Resubmit(albumID int64, in CreateDramaSubmissio
 		if err := tx.Create(&media).Error; err != nil {
 			return err
 		}
-		updates := map[string]any{"submitted_name": in.SubmittedName, "language": in.Language, "year": in.Year, "description": in.Description, "drama_type": in.DramaType, "tag_list": string(tagListJSON), "version": targetVersion, "review_id": reviewID, "review_status": version.ReviewStatus}
+		updates := map[string]any{"submitted_name": in.SubmittedName, "language": in.Language, "year": in.Year, "description": in.Description, "drama_type": in.DramaType, "tag_list": string(tagListJSON), "version": targetVersion}
 		if err := tx.Model(&submission).Updates(updates).Error; err != nil {
 			return err
 		}
-		result = dramaSubmissionListItem(albumID, submission.AppID, in.SubmittedName, submission.DramaID, drama.EpisodeCount, targetVersion, submission.CreatedAt, version.ReviewStatus, submission.PublishStatus, version.WorkflowStatus)
+		var sourceApp model.App
+		if err := tx.Select("app_id").First(&sourceApp, submission.SourceAppID).Error; err != nil {
+			return err
+		}
+		result = dramaSubmissionListItem(albumID, sourceApp.TiktokAppID, in.SubmittedName, submission.DramaID, drama.EpisodeCount, targetVersion, submission.CreatedAt, version.ReviewStatus, submission.PublishStatus, version.WorkflowStatus)
 		return nil
 	})
 	if err != nil {
@@ -493,7 +528,6 @@ func (s *dramaSubmissionService) SimulateMediaFailure(albumID int64, versionNumb
 			"upload_error":    "上传失败",
 			"job_id":          "",
 			"vid":             "",
-			"review_status":   model.DramaReviewUnsubmitted,
 			"last_attempt_at": now,
 		}).Error; err != nil {
 			return err
@@ -538,7 +572,7 @@ func updateUploadWorkflowProjection(tx *gorm.DB, submission *model.DramaSubmissi
 		return err
 	}
 	if version.WorkflowStatus != model.DramaSubmissionWorkflowAlbumReady {
-		return tx.Model(submission).Updates(map[string]any{"review_status": model.DramaReviewUnsubmitted, "review_id": version.ReviewID}).Error
+		return nil
 	}
 	return submitReadyVersion(tx, submission, version)
 }
@@ -590,10 +624,7 @@ func submitReadyVersion(tx *gorm.DB, submission *model.DramaSubmission, version 
 	if err := tx.Model(version).Updates(map[string]any{"workflow_status": model.DramaSubmissionWorkflowReviewing, "workflow_error": "", "review_status": model.DramaReviewPending, "submitted_at": now}).Error; err != nil {
 		return err
 	}
-	if err := tx.Model(&model.DramaSubmissionMedia{}).Where("album_id = ? AND version = ?", submission.AlbumID, version.Version).Update("review_status", model.DramaReviewPending).Error; err != nil {
-		return err
-	}
-	return tx.Model(submission).Updates(map[string]any{"review_status": model.DramaReviewPending, "review_id": version.ReviewID}).Error
+	return nil
 }
 
 func lockSubmissionVersion(tx *gorm.DB, albumID int64, versionNumber int) (*model.DramaSubmissionVersion, error) {
@@ -659,10 +690,7 @@ func (s *dramaSubmissionService) Withdraw(albumID int64) error {
 		if err := tx.Model(&currentVersion).Updates(map[string]any{"review_status": model.DramaReviewWithdrawn, "workflow_status": workflowStatus, "workflow_error": "", "withdrawn_at": now}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.DramaSubmissionMedia{}).Where("album_id = ? AND version = ?", albumID, submission.Version).Update("review_status", model.DramaReviewWithdrawn).Error; err != nil {
-			return err
-		}
-		return tx.Model(&submission).Updates(map[string]any{"review_status": model.DramaReviewWithdrawn, "review_id": currentVersion.ReviewID}).Error
+		return nil
 	})
 }
 
@@ -673,6 +701,10 @@ func (s *dramaSubmissionService) TogglePublishStatus(albumID int64) error {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrDramaSubmissionNotFound
 			}
+			return err
+		}
+		var drama model.Drama
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&drama, submission.DramaID).Error; err != nil {
 			return err
 		}
 
@@ -695,19 +727,23 @@ func (s *dramaSubmissionService) TogglePublishStatus(albumID int64) error {
 		if err := tx.Model(&submission).Update("publish_status", publishStatus).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.Drama{}).Where("id = ?", submission.DramaID).Update("status", dramaStatus).Error
+		return tx.Model(&drama).Update("status", dramaStatus).Error
 	})
 }
 func (s *dramaSubmissionService) SimulateReview(albumID int64, reviewStatus int) error {
 	if reviewStatus != model.DramaReviewApproved && reviewStatus != model.DramaReviewRejected {
 		return ErrDramaSubmissionInvalidFields
 	}
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var submission model.DramaSubmission
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&submission, "album_id = ?", albumID).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrDramaSubmissionNotFound
 			}
+			return err
+		}
+		var drama model.Drama
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&drama, submission.DramaID).Error; err != nil {
 			return err
 		}
 		var currentVersion model.DramaSubmissionVersion
@@ -732,23 +768,39 @@ func (s *dramaSubmissionService) SimulateReview(albumID int64, reviewStatus int)
 		if err := tx.Model(&currentVersion).Updates(map[string]any{"review_status": reviewStatus, "workflow_status": workflowStatus, "workflow_error": "", "reviewed_at": now, "rejection_reason": reason}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.DramaSubmissionMedia{}).Where("album_id = ? AND version = ?", albumID, submission.Version).Updates(map[string]any{"review_status": reviewStatus, "rejection_reason": reason}).Error; err != nil {
-			return err
-		}
 		publishStatus := submission.PublishStatus
+		onlineVersion := submission.OnlineVersion
 		if reviewStatus == model.DramaReviewApproved {
 			publishStatus = model.DramaPublishOnline
+			onlineVersion = currentVersion.Version
 		} else if submission.PublishStatus != model.DramaPublishOnline {
 			publishStatus = model.DramaPublishOffline
 		}
-		if err := tx.Model(&submission).Updates(map[string]any{"review_status": reviewStatus, "review_id": currentVersion.ReviewID, "publish_status": publishStatus}).Error; err != nil {
+		if err := tx.Model(&submission).Updates(map[string]any{"publish_status": publishStatus, "online_version": onlineVersion}).Error; err != nil {
 			return err
 		}
 		if reviewStatus == model.DramaReviewApproved {
-			return tx.Model(&model.Drama{}).Where("id = ?", submission.DramaID).Update("status", "上架").Error
+			if err := tx.Model(&drama).Update("status", "上架").Error; err != nil {
+				return err
+			}
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if reviewStatus == model.DramaReviewApproved {
+		var submission model.DramaSubmission
+		if err := s.db.Select("version").First(&submission, "album_id = ?", albumID).Error; err != nil {
+			return err
+		}
+		if submission.Version == 1 {
+			if err := s.authorization.GrantAlbumToAllApps(albumID); err != nil {
+				return fmt.Errorf("剧目已审核通过并上架，但自动授权未完全成功: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 func loadSubmissionResources(tx *gorm.DB, dramaID int64, episodeIDs []int64) (*model.Drama, []model.Episode, error) {
@@ -780,7 +832,7 @@ func loadSubmissionResources(tx *gorm.DB, dramaID int64, episodeIDs []int64) (*m
 }
 
 func submissionVersionFromInput(submission model.DramaSubmission, in CreateDramaSubmissionInput) model.DramaSubmissionVersion {
-	return model.DramaSubmissionVersion{ID: snowflake.NextID(), AlbumID: submission.AlbumID, Version: submission.Version, SubmittedName: in.SubmittedName, CoverURL: in.CoverURL, Language: in.Language, Year: in.Year, Description: in.Description, DramaType: in.DramaType, TagList: append([]int(nil), in.TagList...), ReviewID: submission.ReviewID, ReviewStatus: model.DramaReviewUnsubmitted, WorkflowStatus: model.DramaSubmissionWorkflowUploading}
+	return model.DramaSubmissionVersion{ID: snowflake.NextID(), AlbumID: submission.AlbumID, Version: submission.Version, SubmittedName: in.SubmittedName, CoverURL: in.CoverURL, Language: in.Language, Year: in.Year, Description: in.Description, DramaType: in.DramaType, TagList: append([]int(nil), in.TagList...), ReviewID: snowflake.NextID(), ReviewStatus: model.DramaReviewUnsubmitted, WorkflowStatus: model.DramaSubmissionWorkflowUploading}
 }
 
 func initialWorkflowState(media []model.DramaSubmissionMedia) string {
@@ -795,12 +847,6 @@ func initialWorkflowState(media []model.DramaSubmissionMedia) string {
 	return model.DramaSubmissionWorkflowReviewing
 }
 
-func setSubmissionMediaReviewStatus(media []model.DramaSubmissionMedia, reviewStatus int) {
-	for index := range media {
-		media[index].ReviewStatus = reviewStatus
-	}
-}
-
 func buildSubmissionMedia(albumID int64, version int, coverURL string, episodes []model.Episode, previous map[string]model.DramaSubmissionMedia) []model.DramaSubmissionMedia {
 	media := make([]model.DramaSubmissionMedia, 0, len(episodes)+1)
 	media = append(media, reusableSubmissionMedia(albumID, version, model.DramaSubmissionMediaCover, 0, 0, coverURL, previous))
@@ -813,12 +859,12 @@ func buildSubmissionMedia(albumID int64, version int, coverURL string, episodes 
 func reusableSubmissionMedia(albumID int64, version int, mediaType string, episodeID int64, episodeNo int, sourceURL string, previous map[string]model.DramaSubmissionMedia) model.DramaSubmissionMedia {
 	if item, ok := previous[mediaKey(mediaType, episodeID)]; ok && item.SourceURL == sourceURL && item.UploadStatus == model.DramaSubmissionMediaSuccess && item.VID != "" {
 		now := time.Now().UTC()
-		return model.DramaSubmissionMedia{ID: snowflake.NextID(), AlbumID: albumID, Version: version, MediaType: mediaType, EpisodeID: episodeID, EpisodeNo: episodeNo, SourceURL: sourceURL, UploadStatus: model.DramaSubmissionMediaSuccess, JobID: item.JobID, VID: item.VID, ReviewStatus: model.DramaReviewUnsubmitted, SourceMediaID: item.ID, LastAttemptAt: &now}
+		return model.DramaSubmissionMedia{ID: snowflake.NextID(), AlbumID: albumID, Version: version, MediaType: mediaType, EpisodeID: episodeID, EpisodeNo: episodeNo, SourceURL: sourceURL, UploadStatus: model.DramaSubmissionMediaSuccess, JobID: item.JobID, VID: item.VID, SourceMediaID: item.ID, LastAttemptAt: &now}
 	}
 	if mediaType == model.DramaSubmissionMediaCover {
 		return simulatedSubmissionMedia(albumID, version, mediaType, episodeID, episodeNo, sourceURL)
 	}
-	return model.DramaSubmissionMedia{ID: snowflake.NextID(), AlbumID: albumID, Version: version, MediaType: mediaType, EpisodeID: episodeID, EpisodeNo: episodeNo, SourceURL: sourceURL, UploadStatus: model.DramaSubmissionMediaProcessing, ReviewStatus: model.DramaReviewUnsubmitted}
+	return model.DramaSubmissionMedia{ID: snowflake.NextID(), AlbumID: albumID, Version: version, MediaType: mediaType, EpisodeID: episodeID, EpisodeNo: episodeNo, SourceURL: sourceURL, UploadStatus: model.DramaSubmissionMediaProcessing}
 }
 
 func mediaKey(mediaType string, episodeID int64) string {

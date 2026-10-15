@@ -62,7 +62,8 @@ var (
 // ─── Implementation ─────────────────────────────────────────────────────────
 
 type appService struct {
-	db *gorm.DB
+	db            *gorm.DB
+	authorization *dramaAuthorizationService
 }
 
 func (s *appService) List(f AppListFilter) ([]model.App, int64, error) {
@@ -136,6 +137,9 @@ func (s *appService) Create(in CreateAppInput) (*model.App, error) {
 		if isDuplicate(err) {
 			return nil, classifyAppDuplicate(err)
 		}
+		return nil, err
+	}
+	if err := s.authorization.GrantAppToAllSubmissions(app.ID); err != nil {
 		return nil, err
 	}
 	return &app, nil

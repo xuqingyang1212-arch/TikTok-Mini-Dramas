@@ -121,6 +121,8 @@ func dramaSubmissionError(c *gin.Context, err error, action string) bool {
 		response.FailBadRequest(c, "该剧目没有审核通过的版本，无法上下架")
 	case errors.Is(err, service.ErrDramaSubmissionInvalidState):
 		response.FailBadRequest(c, "当前状态不支持该操作")
+	case errors.Is(err, service.ErrDramaSubmissionInvalidApp):
+		response.FailBadRequest(c, "授权的小程序无效或未启用")
 	case errors.Is(err, service.ErrDramaSubmissionInvalidFields):
 		response.FailBadRequest(c, "请完整填写提审信息")
 	case err != nil:
@@ -129,6 +131,38 @@ func dramaSubmissionError(c *gin.Context, err error, action string) bool {
 		return false
 	}
 	return true
+}
+
+type updateDramaSubmissionAuthorizationsReq struct {
+	AppIDs []string `json:"appIds"`
+}
+
+func (a *Application) GetDramaSubmissionAuthorizations(c *gin.Context) {
+	albumID, ok := ParseID(c, "albumId")
+	if !ok {
+		return
+	}
+	detail, err := a.services.DramaSubmission.GetAuthorizations(albumID)
+	if dramaSubmissionError(c, err, "查询授权") {
+		return
+	}
+	response.OK(c, detail)
+}
+
+func (a *Application) UpdateDramaSubmissionAuthorizations(c *gin.Context) {
+	albumID, ok := ParseID(c, "albumId")
+	if !ok {
+		return
+	}
+	var req updateDramaSubmissionAuthorizationsReq
+	if !BindOrFail(c, &req) {
+		return
+	}
+	detail, err := a.services.DramaSubmission.UpdateAuthorizations(albumID, req.AppIDs)
+	if dramaSubmissionError(c, err, "更新授权") {
+		return
+	}
+	response.OK(c, detail)
 }
 
 func (a *Application) GetDramaSubmission(c *gin.Context) {

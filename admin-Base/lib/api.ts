@@ -11,7 +11,7 @@ export type { PromotionLinkListItem, PromotionLinkCreateDto, PromotionLinkCreate
 export { dramaApi, episodeApi, uploadApi } from "./api/dramas"
 export type { DramaCreateDto, EpisodeItem } from "./api/dramas"
 export { dramaSubmissionApi } from "./api/drama-submissions"
-export type { DramaSubmissionReviewStatus, DramaSubmissionPublishStatus, DramaSubmissionUploadStatus, DramaSubmissionWorkflowStatus, DramaSubmissionListItem, EligibleDramaItem, DramaSubmissionCreateDto, DramaSubmissionVersionItem, DramaSubmissionDetail, DramaSubmissionEpisodeItem, DramaSubmissionVersionDetail, DramaSubmissionListParams } from "./api/drama-submissions"
+export type { DramaSubmissionReviewStatus, DramaSubmissionPublishStatus, DramaSubmissionUploadStatus, DramaSubmissionWorkflowStatus, DramaSubmissionListItem, DramaSubmissionAuthorizationItem, DramaSubmissionAuthorizationDetail, EligibleDramaItem, DramaSubmissionCreateDto, DramaSubmissionVersionItem, DramaSubmissionDetail, DramaSubmissionEpisodeItem, DramaSubmissionVersionDetail, DramaSubmissionListParams } from "./api/drama-submissions"
 export { subscriptionApi, paymentConfigApi } from "./api/monetization"
 export type { SubscriptionPlanCreateDto, SubscriptionPlanItem, PaymentConfigCreateDto, PaymentConfigItem } from "./api/monetization"
 export { rechargeOrderApi, adSessionApi, mediaEventReportApi } from "./api/operations"

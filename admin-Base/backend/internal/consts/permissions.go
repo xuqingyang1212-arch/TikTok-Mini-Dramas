@@ -33,9 +33,10 @@ const (
 	// ═══════════════════════════════════════════════════════════════════════
 	// 资源管理 · 剧目提审
 	// ═══════════════════════════════════════════════════════════════════════
-	ResourceDramaSubmissionList   = "resource.drama-submission.list"
-	ResourceDramaSubmissionAdd    = "resource.drama-submission.add"
-	ResourceDramaSubmissionReview = "resource.drama-submission.review"
+	ResourceDramaSubmissionList      = "resource.drama-submission.list"
+	ResourceDramaSubmissionAdd       = "resource.drama-submission.add"
+	ResourceDramaSubmissionReview    = "resource.drama-submission.review"
+	ResourceDramaSubmissionAuthorize = "resource.drama-submission.authorize"
 
 	// ═══════════════════════════════════════════════════════════════════════
 	// 推广管理 · 推广链接
@@ -122,6 +123,7 @@ var PermissionTree = []PermissionNode{
 					{Key: ResourceDramaSubmissionList, Label: "列表数据"},
 					{Key: ResourceDramaSubmissionAdd, Label: "新增"},
 					{Key: ResourceDramaSubmissionReview, Label: "模拟审核"},
+					{Key: ResourceDramaSubmissionAuthorize, Label: "剧目授权"},
 				},
 			},
 		},

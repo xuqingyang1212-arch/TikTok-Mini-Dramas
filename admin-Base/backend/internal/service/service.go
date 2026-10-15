@@ -31,14 +31,15 @@ func New(db *gorm.DB) *Services {
 	paymentConfig := &paymentConfigService{db: db}
 	entitlements := &entitlementResolver{db: db}
 	miniPayment := &miniPaymentService{db: db, payConfig: paymentConfig, entitlements: entitlements}
+	authorization := newDramaAuthorizationService(db)
 	return &Services{
 		User:             &userService{db: db},
 		Role:             &roleService{db: db},
-		App:              &appService{db: db},
+		App:              &appService{db: db, authorization: authorization},
 		AppUser:          &appUserService{db: db},
 		Drama:            &dramaService{db: db},
 		Episode:          &episodeService{db: db},
-		DramaSubmission:  &dramaSubmissionService{db: db},
+		DramaSubmission:  &dramaSubmissionService{db: db, authorization: authorization},
 		Mini:             &miniService{db: db, payment: miniPayment, entitlements: entitlements},
 		AdUnlock:         &adUnlockService{db: db, entitlements: entitlements},
 		PaymentConfig:    paymentConfig,

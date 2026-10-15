@@ -75,7 +75,7 @@ export function Popconfirm({
           ref={popoverRef}
           role="dialog"
           aria-modal="false"
-          className="absolute right-0 top-full z-[100] mt-1 w-max min-w-[220px] max-w-[280px] rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-lg"
+          className="absolute right-0 top-full z-[100] mt-1 w-[280px] max-w-[calc(100vw-2rem)] whitespace-normal rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-lg"
         >
           <div className="flex items-start gap-2">
             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#fef3c7]">

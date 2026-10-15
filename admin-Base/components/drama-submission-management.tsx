@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { dramaSubmissionApi, episodeApi, type DramaSubmissionListItem, type EligibleDramaItem, type EpisodeItem } from "@/lib/api"
 import { SubmissionCoverUpload } from "@/components/submission-cover-upload"
 import { SubmissionDetailDrawers } from "@/components/submission-detail-drawers"
+import { SubmissionAuthorizationDrawer } from "@/components/submission-authorization-drawer"
 import { formatDateTime } from "@/lib/format"
 import { toast } from "@/lib/toast"
 import { usePerm } from "@/components/admin-layout"
@@ -46,7 +47,9 @@ export default function DramaSubmissionManagement() {
   const canAdd = usePerm("resource.drama-submission.add")
   const canReview = usePerm("resource.drama-submission.review")
   const canPublish = usePerm("resource.drama-submission.review")
+  const canAuthorize = usePerm("resource.drama-submission.authorize")
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [authorizationAlbumId, setAuthorizationAlbumId] = useState("")
   const [editingAlbumId, setEditingAlbumId] = useState("")
   const [detailAlbumId, setDetailAlbumId] = useState("")
   const [detailRefreshKey, setDetailRefreshKey] = useState(0)
@@ -191,7 +194,7 @@ export default function DramaSubmissionManagement() {
         {data.map((row, index) => <tr key={row.albumId} className={cn("hover:bg-[#f9fafb]", index < data.length - 1 && "border-b border-[#f3f4f6]")}>
           <td className="px-4 py-3 font-mono text-[12.5px] text-[#4b5563] whitespace-nowrap">{row.albumId}</td><td className="px-4 py-3 text-[12.5px] font-medium text-[#111827] whitespace-nowrap">{row.submittedName}</td><td className="px-4 py-3 font-mono text-[12.5px] text-[#4b5563] whitespace-nowrap">{row.dramaId}</td><td className="px-4 py-3 text-[12.5px] text-[#4b5563] whitespace-nowrap">{row.episodeCount}</td><td className="px-4 py-3 text-[12.5px] text-[#4b5563] whitespace-nowrap">{formatDateTime(row.createdAt)}</td>
           <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={reviewStatusLabels[row.reviewStatus] ?? "未送审"} config={reviewBadgeConfig} /></td><td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={publishStatusLabels[row.publishStatus] ?? "下架"} config={{ "上架": { bg: "bg-[#ecfdf5]", text: "text-[#059669]" } }} /></td>
-          <td className="px-4 py-3 whitespace-nowrap"><div className="flex gap-2"><ActionButton onClick={() => setDetailAlbumId(row.albumId)}>查看详情</ActionButton>{canReview && row.reviewStatus === 1 && <><ActionButton variant="neutral" onClick={() => void withdraw(row.albumId)}>撤回送审</ActionButton><ActionButton onClick={() => void simulateReview(row.albumId, 2)}>模拟通过</ActionButton><ActionButton variant="danger" onClick={() => void simulateReview(row.albumId, 3)}>模拟驳回</ActionButton></>}{canAdd && row.reviewStatus !== 1 && <>{resumableWorkflows.has(row.workflowStatus) && <ActionButton onClick={() => void continueVersion(row.albumId, row.version)}>继续提审</ActionButton>}<ActionButton onClick={() => void openResubmit(row)}>重新提审</ActionButton></>}{canPublish && row.publishStatus === 2 && <ActionButton disabled={publishLoadingAlbumId === row.albumId} onClick={() => void togglePublishStatus(row)}>{publishLoadingAlbumId === row.albumId ? "处理中..." : "上架"}</ActionButton>}{canPublish && row.publishStatus === 1 && <Popconfirm title="确认下架该剧目？" description="下架后小程序将无法继续播放该剧目。" confirmText="确认下架" onConfirm={() => togglePublishStatus(row)}><ActionButton variant="danger" disabled={publishLoadingAlbumId === row.albumId}>{publishLoadingAlbumId === row.albumId ? "处理中..." : "下架"}</ActionButton></Popconfirm>}</div></td>
+          <td className="px-4 py-3 whitespace-nowrap"><div className="flex gap-2"><ActionButton onClick={() => setDetailAlbumId(row.albumId)}>查看详情</ActionButton><ActionButton variant="neutral" onClick={() => setAuthorizationAlbumId(row.albumId)}>授权记录</ActionButton>{canReview && row.reviewStatus === 1 && <><Popconfirm title="确认撤回送审？" description="撤回后当前版本将停止审核，后续可重新提审。" confirmText="确认撤回" onConfirm={() => withdraw(row.albumId)}><ActionButton variant="neutral">撤回送审</ActionButton></Popconfirm><ActionButton onClick={() => void simulateReview(row.albumId, 2)}>模拟通过</ActionButton><ActionButton variant="danger" onClick={() => void simulateReview(row.albumId, 3)}>模拟驳回</ActionButton></>}{canAdd && row.reviewStatus !== 1 && <>{resumableWorkflows.has(row.workflowStatus) && <ActionButton onClick={() => void continueVersion(row.albumId, row.version)}>继续提审</ActionButton>}<ActionButton onClick={() => void openResubmit(row)}>重新提审</ActionButton></>}{canPublish && row.publishStatus === 2 && <ActionButton disabled={publishLoadingAlbumId === row.albumId} onClick={() => void togglePublishStatus(row)}>{publishLoadingAlbumId === row.albumId ? "处理中..." : "上架"}</ActionButton>}{canPublish && row.publishStatus === 1 && <Popconfirm title="确认下架该剧目？" description="下架后小程序将无法继续播放该剧目。" confirmText="确认下架" onConfirm={() => togglePublishStatus(row)}><ActionButton variant="danger" disabled={publishLoadingAlbumId === row.albumId}>{publishLoadingAlbumId === row.albumId ? "处理中..." : "下架"}</ActionButton></Popconfirm>}</div></td>
         </tr>)}
       </FixedHeaderTable>
       <div className="shrink-0 border-t border-[#e5e7eb]"><ListPagination total={total} {...paginationProps} /></div>
@@ -212,6 +215,7 @@ export default function DramaSubmissionManagement() {
         </div>
       </RightDrawer>
       <SubmissionDetailDrawers albumId={detailAlbumId} open={Boolean(detailAlbumId)} refreshKey={detailRefreshKey} onClose={() => { setDetailAlbumId(""); void refresh() }} />
+      <SubmissionAuthorizationDrawer albumId={authorizationAlbumId} open={Boolean(authorizationAlbumId)} canEdit={canAuthorize} onClose={() => setAuthorizationAlbumId("")} />
     </div>
   )
 }

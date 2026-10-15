@@ -37,6 +37,10 @@ demo:
   # 固定验证码（后台登录用，与脚手架保持一致）
   fixed_verify_code: "123456"
 
+# 剧目提审来源小程序。业务关系保存 apps.id，此配置仅用于定位来源应用。
+drama_submission:
+  source_tiktok_app_id: "tt60ac80b7ca957b06"
+
 # 推广链接直接打开移动端播放页，并携带小驼峰参数 dramaId 和 linkId。
 # 局域网联调时改为当前电脑 IP，例如 http://10.235.120.10:3001。
 promotion:
