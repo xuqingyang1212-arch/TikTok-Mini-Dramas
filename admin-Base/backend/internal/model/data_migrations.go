@@ -15,6 +15,7 @@ const (
 	normalizeSubmissionAppReferencesMigration = "20261015_normalize_submission_app_references"
 	dropLegacySubmissionAppReferenceMigration = "20261015_drop_legacy_submission_app_reference"
 	normalizeSubmissionReviewStateMigration   = "20261015_normalize_submission_review_state"
+	normalizeAppSubjectReferencesMigration    = "20261015_normalize_app_subject_references"
 )
 
 type dataMigration struct {
@@ -28,13 +29,26 @@ func runPreSchemaMigrations(db *gorm.DB) error {
 		return fmt.Errorf("prepare data migrations: %w", err)
 	}
 	applied, err := dataMigrationApplied(db, normalizeSubmissionAppReferencesMigration)
+	if err != nil {
+		return err
+	}
+	if !applied {
+		if err := normalizeSubmissionAppReferences(db); err != nil {
+			return err
+		}
+		if err := recordDataMigration(db, normalizeSubmissionAppReferencesMigration); err != nil {
+			return err
+		}
+	}
+
+	applied, err = dataMigrationApplied(db, normalizeAppSubjectReferencesMigration)
 	if err != nil || applied {
 		return err
 	}
-	if err := normalizeSubmissionAppReferences(db); err != nil {
+	if err := normalizeAppSubjectReferences(db); err != nil {
 		return err
 	}
-	return recordDataMigration(db, normalizeSubmissionAppReferencesMigration)
+	return recordDataMigration(db, normalizeAppSubjectReferencesMigration)
 }
 
 func runPostSchemaMigrations(db *gorm.DB) error {
@@ -73,6 +87,62 @@ func dataMigrationApplied(db *gorm.DB, name string) (bool, error) {
 
 func recordDataMigration(db *gorm.DB, name string) error {
 	return db.Create(&dataMigration{Key: name}).Error
+}
+
+func normalizeAppSubjectReferences(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&App{}) {
+		return nil
+	}
+	if !db.Migrator().HasTable(&SubjectInfo{}) {
+		if err := db.AutoMigrate(&SubjectInfo{}); err != nil {
+			return fmt.Errorf("prepare subject information: %w", err)
+		}
+	}
+
+	defaultSubject := defaultSubjectInfo()
+	if err := db.Where("subject_id = ?", defaultSubject.SubjectID).FirstOrCreate(&defaultSubject).Error; err != nil {
+		return fmt.Errorf("initialize default subject: %w", err)
+	}
+	if !db.Migrator().HasColumn(&App{}, "subject_id") {
+		if err := db.Exec("ALTER TABLE apps ADD COLUMN subject_id VARCHAR(64) NULL AFTER client_secret").Error; err != nil {
+			return fmt.Errorf("add app subject reference: %w", err)
+		}
+	}
+	if err := db.Model(&App{}).
+		Where("subject_id IS NULL OR subject_id = ''").
+		Update("subject_id", defaultSubject.SubjectID).Error; err != nil {
+		return fmt.Errorf("backfill app subject references: %w", err)
+	}
+	if err := requireNoMissingSubjectReferences(db); err != nil {
+		return err
+	}
+	if err := db.Exec("ALTER TABLE apps MODIFY COLUMN subject_id VARCHAR(64) NOT NULL").Error; err != nil {
+		return fmt.Errorf("finalize app subject reference: %w", err)
+	}
+	if db.Migrator().HasColumn(&App{}, "company") {
+		if err := db.Migrator().DropColumn(&App{}, "company"); err != nil {
+			return fmt.Errorf("drop legacy app company: %w", err)
+		}
+	}
+	return nil
+}
+
+func requireNoMissingSubjectReferences(db *gorm.DB) error {
+	var missing int64
+	if err := db.Raw(`
+		SELECT COUNT(*)
+		FROM apps
+		LEFT JOIN subject_infos ON subject_infos.subject_id = apps.subject_id
+		WHERE apps.subject_id IS NULL
+		   OR apps.subject_id = ''
+		   OR subject_infos.subject_id IS NULL
+	`).Scan(&missing).Error; err != nil {
+		return fmt.Errorf("validate app subject references: %w", err)
+	}
+	if missing > 0 {
+		return fmt.Errorf("cannot normalize app subject references: %d app records are missing a subject", missing)
+	}
+	return nil
 }
 
 func normalizeSubmissionAppReferences(db *gorm.DB) error {

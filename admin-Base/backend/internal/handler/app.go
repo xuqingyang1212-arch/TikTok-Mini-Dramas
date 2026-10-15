@@ -19,7 +19,7 @@ func (a *Application) ListApps(c *gin.Context) {
 		Name:             TrimQuery(c, "name"),
 		AppID:            TrimQuery(c, "appId"),
 		ClientKey:        TrimQuery(c, "clientKey"),
-		Company:          TrimQuery(c, "company"),
+		SubjectID:        TrimQuery(c, "subjectId"),
 		MonetizationType: TrimQuery(c, "monetizationType"),
 		Page:             page,
 		PageSize:         pageSize,
@@ -61,7 +61,7 @@ type CreateAppReq struct {
 	AppID            string `json:"appId" binding:"required"`
 	ClientKey        string `json:"clientKey" binding:"required"`
 	ClientSecret     string `json:"clientSecret" binding:"required"`
-	Company          string `json:"company" binding:"required"`
+	SubjectID        string `json:"subjectId" binding:"required"`
 	MonetizationType string `json:"monetizationType" binding:"required,oneof=IAA IAP"`
 	AdPlacementID    string `json:"adPlacementId"`
 }
@@ -77,7 +77,7 @@ func (a *Application) CreateApp(c *gin.Context) {
 		AppID:            req.AppID,
 		ClientKey:        req.ClientKey,
 		ClientSecret:     req.ClientSecret,
-		Company:          req.Company,
+		SubjectID:        req.SubjectID,
 		MonetizationType: req.MonetizationType,
 		AdPlacementID:    req.AdPlacementID,
 	})
@@ -91,6 +91,10 @@ func (a *Application) CreateApp(c *gin.Context) {
 	}
 	if err == service.ErrInvalidMonetizationType {
 		response.FailBadRequest(c, "变现类型仅支持 IAA 或 IAP")
+		return
+	}
+	if err == service.ErrSubjectNotFound {
+		response.FailBadRequest(c, "主体信息不存在")
 		return
 	}
 	if err != nil {
@@ -107,7 +111,7 @@ type UpdateAppReq struct {
 	AppID            string `json:"appId" binding:"required"`
 	ClientKey        string `json:"clientKey"`
 	ClientSecret     string `json:"clientSecret"`
-	Company          string `json:"company" binding:"required"`
+	SubjectID        string `json:"subjectId" binding:"required"`
 	MonetizationType string `json:"monetizationType" binding:"required,oneof=IAA IAP"`
 	AdPlacementID    string `json:"adPlacementId"`
 }
@@ -128,7 +132,7 @@ func (a *Application) UpdateApp(c *gin.Context) {
 		AppID:            req.AppID,
 		ClientKey:        req.ClientKey,
 		ClientSecret:     req.ClientSecret,
-		Company:          req.Company,
+		SubjectID:        req.SubjectID,
 		MonetizationType: req.MonetizationType,
 		AdPlacementID:    req.AdPlacementID,
 	})
@@ -148,6 +152,10 @@ func (a *Application) UpdateApp(c *gin.Context) {
 		response.FailBadRequest(c, "变现类型仅支持 IAA 或 IAP")
 		return
 	}
+	if err == service.ErrSubjectNotFound {
+		response.FailBadRequest(c, "主体信息不存在")
+		return
+	}
 	if err != nil {
 		response.FailServer(c, "更新失败")
 		return
@@ -155,13 +163,13 @@ func (a *Application) UpdateApp(c *gin.Context) {
 	response.OKMsg(c, "更新成功")
 }
 
-// ─── Get Companies ──────────────────────────────────────────────────────────
+// ─── List Subjects ──────────────────────────────────────────────────────────
 
-func (a *Application) GetAppCompanies(c *gin.Context) {
-	companies, err := a.services.App.GetCompanies()
+func (a *Application) ListSubjects(c *gin.Context) {
+	subjects, err := a.services.App.ListSubjects()
 	if err != nil {
 		response.FailServer(c, "查询失败")
 		return
 	}
-	response.OK(c, companies)
+	response.OK(c, subjects)
 }

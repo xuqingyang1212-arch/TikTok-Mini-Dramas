@@ -11,6 +11,7 @@ import { usePerm } from "@/components/admin-layout"
 import { useFilters } from "@/hooks/use-filters"
 import { usePagination } from "@/hooks/use-pagination"
 import { usePagedQuery } from "@/hooks/use-paged-query"
+import { useSubjectOptions } from "@/hooks/use-subject-options"
 
 // ─────────────── Types ───────────────
 interface AppItem {
@@ -18,7 +19,8 @@ interface AppItem {
   name: string
   appId: string
   clientKey: string
-  company: string
+  subjectId: string
+  subject: { subjectNameCn: string }
   monetizationType: MonetizationType
   adPlacementId: string
   status: string
@@ -30,7 +32,7 @@ interface AppForm {
   appId: string
   clientKey: string
   clientSecret: string
-  company: string
+  subjectId: string
   monetizationType: MonetizationType | ""
   adPlacementId: string
 }
@@ -40,7 +42,7 @@ interface AppFormErrors {
   appId?: string
   clientKey?: string
   clientSecret?: string
-  company?: string
+  subjectId?: string
   monetizationType?: string
 }
 
@@ -48,11 +50,11 @@ interface FilterForm {
   name: string
   appId: string
   clientKey: string
-  company: string
+  subjectId: string
   monetizationType: string
 }
 
-const defaultFilters: FilterForm = { name: "", appId: "", clientKey: "", company: "", monetizationType: "" }
+const defaultFilters: FilterForm = { name: "", appId: "", clientKey: "", subjectId: "", monetizationType: "" }
 const monetizationTypeOptions = [
   { label: "IAA", value: "IAA" },
   { label: "IAP", value: "IAP" },
@@ -104,18 +106,20 @@ function FormInput({
 
 // ─────────────── AppDrawer ───────────────
 function AppDrawer({
-  mode, app, onClose, onSubmit,
+  mode, app, subjectOptions, subjectsLoading, onClose, onSubmit,
 }: {
   mode: "add" | "edit"
   app?: AppItem
+  subjectOptions: { label: string; value: string }[]
+  subjectsLoading: boolean
   onClose: () => void
   onSubmit: (form: AppForm) => Promise<void>
 }) {
   const isEdit = mode === "edit"
   const [form, setForm] = useState<AppForm>(() => (
     isEdit && app
-      ? { name: app.name, appId: app.appId, clientKey: app.clientKey, clientSecret: "", company: app.company, monetizationType: app.monetizationType, adPlacementId: app.adPlacementId || "" }
-      : { name: "", appId: "", clientKey: "", clientSecret: "", company: "", monetizationType: "", adPlacementId: "" }
+      ? { name: app.name, appId: app.appId, clientKey: app.clientKey, clientSecret: "", subjectId: app.subjectId, monetizationType: app.monetizationType, adPlacementId: app.adPlacementId || "" }
+      : { name: "", appId: "", clientKey: "", clientSecret: "", subjectId: "", monetizationType: "", adPlacementId: "" }
   ))
   const [errors, setErrors] = useState<AppFormErrors>({})
   const [submitting, setSubmitting] = useState(false)
@@ -132,7 +136,7 @@ function AppDrawer({
     if (!form.clientKey.trim()) errs.clientKey = "请输入 Client Key"
     // 安全考虑：编辑时 Client Secret 不回显，留空表示不修改；仅新建时必填
     if (!isEdit && !form.clientSecret.trim()) errs.clientSecret = "请输入 Client Secret"
-    if (!form.company.trim()) errs.company = "请输入主体信息"
+    if (!form.subjectId) errs.subjectId = "请选择主体信息"
     if (!form.monetizationType) errs.monetizationType = "请选择变现类型"
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -194,12 +198,13 @@ function AppDrawer({
             error={errors.clientSecret}
             required={!isEdit}
           />
-          <FormInput
+          <FormSelect
             label="主体信息"
-            placeholder="请输入主体信息"
-            value={form.company}
-            onChange={(v) => setField("company", v)}
-            error={errors.company}
+            placeholder={subjectsLoading ? "加载中..." : "请选择主体信息"}
+            value={form.subjectId}
+            onChange={(v) => setField("subjectId", v)}
+            options={subjectOptions}
+            error={errors.subjectId}
             required
           />
           <FormSelect
@@ -245,6 +250,7 @@ function AppDrawer({
 export default function AppManagement() {
   const canAdd = usePerm("operation.app.add")
   const canEdit = usePerm("operation.app.edit")
+  const { options: subjectOptions, loading: subjectsLoading, error: subjectsError } = useSubjectOptions()
 
   // ─── Filter & Pagination ───
   const { draft: draftFilters, active: activeFilters, update: updateDraft, apply: applyFilters, reset: resetFilters } = useFilters(defaultFilters)
@@ -261,7 +267,7 @@ export default function AppManagement() {
       pageSize,
       name: filters?.name.trim() || undefined,
       appId: filters?.appId.trim() || undefined,
-      company: filters?.company.trim() || undefined,
+      subjectId: filters?.subjectId || undefined,
       monetizationType: filters?.monetizationType || undefined,
     })
   ), [])
@@ -313,6 +319,8 @@ export default function AppManagement() {
         <AppDrawer
           mode={drawerMode}
           app={editingApp ?? undefined}
+          subjectOptions={subjectOptions}
+          subjectsLoading={subjectsLoading}
           onClose={closeDrawer}
           onSubmit={drawerMode === "add" ? handleAdd : handleEdit}
         />
@@ -324,9 +332,11 @@ export default function AppManagement() {
       >
         <FilterInput block label="小程序名称" placeholder="请输入" value={draftFilters.name} onChange={(v) => updateDraft("name", v)} />
         <FilterInput block label="App ID" placeholder="请输入" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} />
-        <FilterInput block label="主体信息" placeholder="请输入" value={draftFilters.company} onChange={(v) => updateDraft("company", v)} />
+        <SelectFilter block label="主体信息" value={draftFilters.subjectId} onChange={(v) => updateDraft("subjectId", v)} options={subjectOptions} placeholder={subjectsLoading ? "加载中..." : "全部"} />
         <SelectFilter block label="变现类型" value={draftFilters.monetizationType} onChange={(v) => updateDraft("monetizationType", v)} options={monetizationTypeOptions} placeholder="全部" />
       </FilterBar>
+
+      {subjectsError && <div className="px-5 py-2 text-[13px] text-[#dc2626]">{subjectsError}</div>}
 
       {/* 工具栏（新建按钮） */}
       {canAdd && (
@@ -354,7 +364,7 @@ export default function AppManagement() {
                   className={cn("transition-colors hover:bg-[#f9fafb]", i < data.length - 1 && "border-b border-[#f3f4f6]")}>
                   <td className="px-4 py-3 text-[12.5px] font-medium text-[#111827] whitespace-nowrap">{row.name}</td>
                   <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.appId}</td>
-                  <td className="px-4 py-3 text-[12.5px] text-[#4b5563] whitespace-nowrap">{row.company}</td>
+                  <td className="px-4 py-3 text-[12.5px] text-[#4b5563] whitespace-nowrap">{row.subject?.subjectNameCn || "-"}</td>
                   <td className="px-4 py-3 whitespace-nowrap"><MonetizationBadge type={row.monetizationType} /></td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {canEdit && (

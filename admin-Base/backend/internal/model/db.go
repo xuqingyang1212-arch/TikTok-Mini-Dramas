@@ -46,6 +46,7 @@ func MigrateSchema(db *gorm.DB) error {
 		&Role{},
 		&UserRole{},
 		&RolePermission{},
+		&SubjectInfo{},
 		&App{},
 		&AppUser{},
 		&Drama{},
@@ -70,9 +71,27 @@ func MigrateSchema(db *gorm.DB) error {
 	return runPostSchemaMigrations(db)
 }
 
-const firstPromotionLinkID int64 = 10000001
+const (
+	firstPromotionLinkID int64 = 10000001
+	defaultSubjectID           = "eastern-star-digital-entertainment"
+)
+
+func defaultSubjectInfo() SubjectInfo {
+	return SubjectInfo{
+		SubjectID:          defaultSubjectID,
+		SubjectNameCN:      "东方星空数字娱乐有限公司",
+		SubjectNameEN:      "EASTERN STAR DIGITAL ENTERTAINMENT CO.,LIMITED",
+		RegisteredAddress:  "Room 1401, Building 2, Zheshu Technology Center, No. 15 Chuxin Road, Shangtang Subdistrict, Gongshu District, Hangzhou City, Zhejiang Province",
+		RegistrationNumber: "9133000030758045X2",
+	}
+}
 
 func SetupCurrentData(db *gorm.DB) error {
+	defaultSubject := defaultSubjectInfo()
+	if err := db.Where("subject_id = ?", defaultSubject.SubjectID).FirstOrCreate(&defaultSubject).Error; err != nil {
+		return fmt.Errorf("initialize default subject: %w", err)
+	}
+
 	var nextID sql.NullInt64
 	if err := db.Raw(`
 		SELECT AUTO_INCREMENT

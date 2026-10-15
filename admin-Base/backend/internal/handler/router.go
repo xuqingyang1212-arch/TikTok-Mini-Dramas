@@ -69,8 +69,8 @@ func SetupRouter(mode string, services *service.Services, db *gorm.DB) *gin.Engi
 		auth.GET("/permissions/tree", GetPermissionTree)
 
 		// --- App Management (小程序应用) ---
-		// 注意：/apps/companies 必须在 /apps/:id 前面，否则会被 :id 先匹配
-		auth.GET("/apps/companies", perm(consts.OperationAppList), app.GetAppCompanies)
+		// 注意：固定路径必须在 /apps/:id 前面，否则会被 :id 先匹配
+		auth.GET("/apps/subjects", perm(consts.OperationAppList), app.ListSubjects)
 		auth.GET("/apps", perm(consts.OperationAppList), app.ListApps)
 		auth.GET("/apps/:id", perm(consts.OperationAppList), app.GetApp)
 		auth.POST("/apps", perm(consts.OperationAppAdd), app.CreateApp)

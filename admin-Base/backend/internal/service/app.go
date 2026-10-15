@@ -16,7 +16,7 @@ type AppListFilter struct {
 	Name             string
 	AppID            string
 	ClientKey        string
-	Company          string
+	SubjectID        string
 	MonetizationType string
 	Page             int
 	PageSize         int
@@ -27,7 +27,7 @@ type CreateAppInput struct {
 	AppID            string
 	ClientKey        string
 	ClientSecret     string
-	Company          string
+	SubjectID        string
 	MonetizationType string
 	AdPlacementID    string
 }
@@ -37,7 +37,7 @@ type UpdateAppInput struct {
 	AppID            string
 	ClientKey        string
 	ClientSecret     string
-	Company          string
+	SubjectID        string
 	MonetizationType string
 	AdPlacementID    string
 }
@@ -47,7 +47,7 @@ type AppService interface {
 	GetByID(id int64) (*model.App, error)
 	Create(input CreateAppInput) (*model.App, error)
 	Update(id int64, input UpdateAppInput) error
-	GetCompanies() ([]string, error)
+	ListSubjects() ([]model.SubjectInfo, error)
 }
 
 // ─── Errors ─────────────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ var (
 	ErrAppNotFound             = errors.New("app not found")
 	ErrAppClientKeyExists      = errors.New("client key already exists")
 	ErrAppAppIDExists          = errors.New("app id already exists")
+	ErrSubjectNotFound         = errors.New("subject not found")
 	ErrInvalidMonetizationType = errors.New("invalid monetization type")
 )
 
@@ -78,8 +79,8 @@ func (s *appService) List(f AppListFilter) ([]model.App, int64, error) {
 	if f.ClientKey != "" {
 		db = db.Where("client_key LIKE ?", "%"+f.ClientKey+"%")
 	}
-	if f.Company != "" {
-		db = db.Where("company LIKE ?", "%"+f.Company+"%")
+	if f.SubjectID != "" {
+		db = db.Where("subject_id = ?", f.SubjectID)
 	}
 	if f.MonetizationType != "" {
 		db = db.Where("monetization_type = ?", f.MonetizationType)
@@ -92,7 +93,8 @@ func (s *appService) List(f AppListFilter) ([]model.App, int64, error) {
 
 	page, size := normalizePage(f.Page, f.PageSize)
 	var apps []model.App
-	err := db.Order("created_at DESC").
+	err := db.Preload("Subject").
+		Order("created_at DESC").
 		Offset((page - 1) * size).
 		Limit(size).
 		Find(&apps).Error
@@ -101,7 +103,7 @@ func (s *appService) List(f AppListFilter) ([]model.App, int64, error) {
 
 func (s *appService) GetByID(id int64) (*model.App, error) {
 	var app model.App
-	if err := s.db.First(&app, id).Error; err != nil {
+	if err := s.db.Preload("Subject").First(&app, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrAppNotFound
 		}
@@ -113,6 +115,9 @@ func (s *appService) GetByID(id int64) (*model.App, error) {
 func (s *appService) Create(in CreateAppInput) (*model.App, error) {
 	if !isValidMonetizationType(in.MonetizationType) {
 		return nil, ErrInvalidMonetizationType
+	}
+	if err := s.requireSubject(in.SubjectID); err != nil {
+		return nil, err
 	}
 	if in.AppID != "" {
 		var cnt int64
@@ -128,7 +133,7 @@ func (s *appService) Create(in CreateAppInput) (*model.App, error) {
 		TiktokAppID:      in.AppID,
 		ClientKey:        in.ClientKey,
 		ClientSecret:     in.ClientSecret,
-		Company:          in.Company,
+		SubjectID:        in.SubjectID,
 		MonetizationType: in.MonetizationType,
 		AdPlacementID:    normalizeAdPlacementID(in.MonetizationType, in.AdPlacementID),
 		Status:           "启用",
@@ -142,12 +147,16 @@ func (s *appService) Create(in CreateAppInput) (*model.App, error) {
 	if err := s.authorization.GrantAppToAllSubmissions(app.ID); err != nil {
 		return nil, err
 	}
+	app.Subject, _ = s.getSubject(app.SubjectID)
 	return &app, nil
 }
 
 func (s *appService) Update(id int64, in UpdateAppInput) error {
 	if !isValidMonetizationType(in.MonetizationType) {
 		return ErrInvalidMonetizationType
+	}
+	if err := s.requireSubject(in.SubjectID); err != nil {
+		return err
 	}
 
 	return s.db.Transaction(func(tx *gorm.DB) error {
@@ -177,7 +186,7 @@ func (s *appService) Update(id int64, in UpdateAppInput) error {
 		updates := map[string]any{
 			"name":              in.Name,
 			"app_id":            in.AppID,
-			"company":           in.Company,
+			"subject_id":        in.SubjectID,
 			"monetization_type": in.MonetizationType,
 			"ad_placement_id":   normalizeAdPlacementID(in.MonetizationType, in.AdPlacementID),
 		}
@@ -224,11 +233,24 @@ func normalizeAdPlacementID(monetizationType, adPlacementID string) string {
 	return adPlacementID
 }
 
-func (s *appService) GetCompanies() ([]string, error) {
-	var companies []string
-	err := s.db.Model(&model.App{}).
-		Distinct("company").
-		Where("company != ''").
-		Pluck("company", &companies).Error
-	return companies, err
+func (s *appService) ListSubjects() ([]model.SubjectInfo, error) {
+	var subjects []model.SubjectInfo
+	err := s.db.Order("subject_name_cn ASC").Find(&subjects).Error
+	return subjects, err
+}
+
+func (s *appService) requireSubject(subjectID string) error {
+	_, err := s.getSubject(subjectID)
+	return err
+}
+
+func (s *appService) getSubject(subjectID string) (model.SubjectInfo, error) {
+	var subject model.SubjectInfo
+	if err := s.db.First(&subject, "subject_id = ?", subjectID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return subject, ErrSubjectNotFound
+		}
+		return subject, err
+	}
+	return subject, nil
 }
