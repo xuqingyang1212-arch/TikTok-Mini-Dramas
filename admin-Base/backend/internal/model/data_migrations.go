@@ -16,6 +16,7 @@ const (
 	dropLegacySubmissionAppReferenceMigration = "20261015_drop_legacy_submission_app_reference"
 	normalizeSubmissionReviewStateMigration   = "20261015_normalize_submission_review_state"
 	normalizeAppSubjectReferencesMigration    = "20261015_normalize_app_subject_references"
+	dropAppUserUnionIDMigration               = "20261015_drop_app_user_union_id"
 )
 
 type dataMigration struct {
@@ -68,13 +69,28 @@ func runPostSchemaMigrations(db *gorm.DB) error {
 	}
 
 	applied, err = dataMigrationApplied(db, normalizeSubmissionReviewStateMigration)
+	if err != nil {
+		return err
+	}
+	if !applied {
+		if err := normalizeSubmissionReviewState(db); err != nil {
+			return err
+		}
+		if err := recordDataMigration(db, normalizeSubmissionReviewStateMigration); err != nil {
+			return err
+		}
+	}
+
+	applied, err = dataMigrationApplied(db, dropAppUserUnionIDMigration)
 	if err != nil || applied {
 		return err
 	}
-	if err := normalizeSubmissionReviewState(db); err != nil {
-		return err
+	if db.Migrator().HasColumn(&AppUser{}, "union_id") {
+		if err := db.Migrator().DropColumn(&AppUser{}, "union_id"); err != nil {
+			return fmt.Errorf("drop app user union ID: %w", err)
+		}
 	}
-	return recordDataMigration(db, normalizeSubmissionReviewStateMigration)
+	return recordDataMigration(db, dropAppUserUnionIDMigration)
 }
 
 func dataMigrationApplied(db *gorm.DB, name string) (bool, error) {

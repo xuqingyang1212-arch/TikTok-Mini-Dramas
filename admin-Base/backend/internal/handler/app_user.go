@@ -22,7 +22,6 @@ func (a *Application) ListAppUsers(c *gin.Context) {
 		AppID:              appID,
 		UserID:             TrimQuery(c, "userId"),
 		OpenID:             TrimQuery(c, "openId"),
-		UnionID:            TrimQuery(c, "unionId"),
 		SubscriptionStatus: TrimQuery(c, "subscriptionStatus"),
 		CreatedAtFrom:      createdAtFrom,
 		CreatedAtTo:        createdAtTo,

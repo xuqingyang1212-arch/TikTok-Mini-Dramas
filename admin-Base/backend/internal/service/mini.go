@@ -202,14 +202,10 @@ func (s *miniService) Login(appID, openID string) (*MiniLoginResult, error) {
 	}
 
 	// 4. 创建新用户
-	// union_id 按 open_id 维度绑定：同一 TikTok 账号（相同 open_id）在不同小程序
-	// 下共享同一 union_id；若该 open_id 从未出现过则新生成一个。
-	unionID := s.resolveUnionID(openID)
 	user = model.AppUser{
-		ID:      snowflake.NextID(),
-		AppID:   app.ID,
-		OpenID:  openID,
-		UnionID: unionID,
+		ID:     snowflake.NextID(),
+		AppID:  app.ID,
+		OpenID: openID,
 	}
 	if err := s.db.Create(&user).Error; err != nil {
 		return nil, err
@@ -221,20 +217,6 @@ func (s *miniService) Login(appID, openID string) (*MiniLoginResult, error) {
 		CurrentPromotionLinkID: nil,
 		Subscription:           MiniSubscriptionStatus{Active: false},
 	}, nil
-}
-
-// resolveUnionID 解析 open_id 对应的 union_id：
-// 若已有相同 open_id 的用户（其他小程序注册过）则复用其 union_id，
-// 否则生成一个新的 union_id。
-func (s *miniService) resolveUnionID(openID string) string {
-	var existing model.AppUser
-	err := s.db.Select("union_id").
-		Where("open_id = ? AND union_id <> ''", openID).
-		First(&existing).Error
-	if err == nil && existing.UnionID != "" {
-		return existing.UnionID
-	}
-	return generateUnionID()
 }
 
 // ListDramas 获取已上架剧集列表，按创建时间倒序

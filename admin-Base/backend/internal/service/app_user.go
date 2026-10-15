@@ -1,8 +1,6 @@
 package service
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -17,10 +15,9 @@ import (
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type AppUserListFilter struct {
-	AppID   int64
-	UserID  string
-	OpenID  string
-	UnionID string
+	AppID  int64
+	UserID string
+	OpenID string
 	// 订阅状态筛选：active/expired/canceled/paused/grace/on_hold/revoked/none（未订阅）
 	SubscriptionStatus string
 	CreatedAtFrom      *time.Time
@@ -36,7 +33,6 @@ type AppUserListItem struct {
 	AppName          string        `json:"appName"`
 	MonetizationType string        `json:"monetizationType"`
 	OpenID           string        `json:"openId"`
-	UnionID          string        `json:"unionId"`
 	CreatedAt        datetime.Time `json:"createdAt"`
 	// 当前订阅状态："active"（生效中）/"expired"（已过期）/""（未订阅）
 	SubscriptionStatus   string         `json:"subscriptionStatus"`
@@ -80,7 +76,6 @@ type AppUserDetail struct {
 	AppID                int64                       `json:"appId"`
 	AppName              string                      `json:"appName"`
 	OpenID               string                      `json:"openId"`
-	UnionID              string                      `json:"unionId"`
 	CreatedAt            datetime.Time               `json:"createdAt"`
 	SubscriptionStatus   string                      `json:"subscriptionStatus"`
 	SubscriptionExpireAt *datetime.Time              `json:"subscriptionExpireAt"`
@@ -131,9 +126,6 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 	if f.OpenID != "" {
 		db = db.Where("app_users.open_id LIKE ?", "%"+f.OpenID+"%")
 	}
-	if f.UnionID != "" {
-		db = db.Where("app_users.union_id LIKE ?", "%"+f.UnionID+"%")
-	}
 	if f.CreatedAtFrom != nil {
 		db = db.Where("app_users.created_at >= ?", f.CreatedAtFrom)
 	}
@@ -180,10 +172,9 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 		AppName          string    `gorm:"column:app_name"`
 		MonetizationType string    `gorm:"column:monetization_type"`
 		OpenID           string    `gorm:"column:open_id"`
-		UnionID          string    `gorm:"column:union_id"`
 		CreatedAt        time.Time `gorm:"column:created_at"`
 	}
-	err := db.Select("app_users.id, app_users.app_id, apps.name as app_name, apps.monetization_type, app_users.open_id, app_users.union_id, app_users.created_at").
+	err := db.Select("app_users.id, app_users.app_id, apps.name as app_name, apps.monetization_type, app_users.open_id, app_users.created_at").
 		Order("app_users.created_at DESC").
 		Offset((page - 1) * size).
 		Limit(size).
@@ -202,7 +193,6 @@ func (s *appUserService) List(f AppUserListFilter) ([]AppUserListItem, int64, er
 			AppName:          r.AppName,
 			MonetizationType: r.MonetizationType,
 			OpenID:           r.OpenID,
-			UnionID:          r.UnionID,
 			CreatedAt:        datetime.From(r.CreatedAt),
 		}
 	}
@@ -297,7 +287,6 @@ func (s *appUserService) Detail(id int64) (*AppUserDetail, error) {
 		AppID:         user.AppID,
 		AppName:       appName,
 		OpenID:        user.OpenID,
-		UnionID:       user.UnionID,
 		CreatedAt:     datetime.From(user.CreatedAt),
 		Subscriptions: make([]AppUserSubscriptionRecord, 0),
 		Unlocks:       make([]AppUserUnlockRecord, 0),
@@ -351,10 +340,9 @@ func (s *appUserService) Unlocks(id int64, unlockType string, page, pageSize int
 
 func (s *appUserService) Create(in CreateAppUserInput) (*model.AppUser, error) {
 	user := model.AppUser{
-		ID:      snowflake.NextID(),
-		AppID:   in.AppID,
-		OpenID:  in.OpenID,
-		UnionID: generateUnionID(),
+		ID:     snowflake.NextID(),
+		AppID:  in.AppID,
+		OpenID: in.OpenID,
 	}
 	if err := s.db.Create(&user).Error; err != nil {
 		if isDuplicate(err) {
@@ -383,14 +371,4 @@ func (s *appUserService) GetOrCreateByOpenID(appID int64, openID string) (*model
 		return nil, false, err
 	}
 	return newUser, true, nil
-}
-
-// generateUnionID 生成 TikTok 风格的 union_id（演示项目随机生成）。
-// 真实场景下同一开发者账号下的同一 TikTok 用户在不同小程序共享同一 union_id。
-func generateUnionID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("union_%d", snowflake.NextID())
-	}
-	return "u_" + hex.EncodeToString(b)
 }

@@ -23,7 +23,6 @@ interface AppUserItem {
   appName: string
   monetizationType: MonetizationType
   openId: string
-  unionId: string
   createdAt: string
   subscriptionStatus?: string
   subscriptionExpireAt?: string | null
@@ -103,7 +102,6 @@ interface UserDetail {
   appId: number
   appName: string
   openId: string
-  unionId: string
   createdAt: string
   subscriptionStatus?: string
   subscriptionExpireAt?: string | null
@@ -130,7 +128,6 @@ interface FilterForm {
   appId: string
   userId: string
   openId: string
-  unionId: string
   subscriptionStatus: string
   createdAtRange: DateRangeValue
 }
@@ -139,7 +136,6 @@ const defaultFilters: FilterForm = {
   appId: "",
   userId: "",
   openId: "",
-  unionId: "",
   subscriptionStatus: "",
   createdAtRange: [],
 }
@@ -158,7 +154,6 @@ export default function AppUserManagement() {
       appId: filters?.appId || undefined,
       userId: filters?.userId.trim() || undefined,
       openId: filters?.openId.trim() || undefined,
-      unionId: filters?.unionId.trim() || undefined,
       subscriptionStatus: filters?.subscriptionStatus || undefined,
       createdAtFrom: filters?.createdAtRange[0] || undefined,
       createdAtTo: filters?.createdAtRange[1] || undefined,
@@ -195,7 +190,6 @@ export default function AppUserManagement() {
         <AppSelectFilter block label="小程序" value={draftFilters.appId} onChange={(v) => updateDraft("appId", v)} apps={appOptions} placeholder="全部" />
         <FilterInput block label="用户ID" placeholder="请输入" value={draftFilters.userId} onChange={(v) => updateDraft("userId", v)} />
         <FilterInput block label="openid" placeholder="请输入" value={draftFilters.openId} onChange={(v) => updateDraft("openId", v)} />
-        <FilterInput block label="unionid" placeholder="请输入" value={draftFilters.unionId} onChange={(v) => updateDraft("unionId", v)} />
         <SelectFilter block label="订阅状态" value={draftFilters.subscriptionStatus} onChange={(v) => updateDraft("subscriptionStatus", v)} options={SUB_STATUS_OPTIONS} placeholder="全部" />
         <DateRangePicker block label="注册时间" value={draftFilters.createdAtRange} onChange={(v) => updateDraft("createdAtRange", v)} />
       </FilterBar>
@@ -203,11 +197,11 @@ export default function AppUserManagement() {
       {/* 表格区 */}
       <FixedHeaderTable
         autoWidth
-        minWidth={900}
-        columns={new Array(8).fill("")}
+        minWidth={820}
+        columns={new Array(7).fill("")}
         loading={loading && data.length === 0}
         empty={data.length === 0}
-        header={["小程序", "用户ID", "openid", "unionid", "注册时间", "订阅状态", "订阅到期时间", "操作"].map((label) => (
+        header={["小程序", "用户ID", "openid", "注册时间", "订阅状态", "订阅到期时间", "操作"].map((label) => (
           <th key={label} className={thClass}>{label}</th>
         ))}
       >
@@ -222,7 +216,6 @@ export default function AppUserManagement() {
                   </td>
                   <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.userId}</td>
                   <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.openId}</td>
-                  <td className="px-4 py-3 text-[12.5px] font-mono text-[#4b5563] whitespace-nowrap">{row.unionId}</td>
                   <td className="px-4 py-3 text-[12.5px] text-[#6b7280] whitespace-nowrap">{formatDateTime(row.createdAt)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span
@@ -285,7 +278,6 @@ function UserDetailDrawer({
     { label: "用户ID", value: user.userId, mono: true },
     { label: "小程序", value: user.appName },
     { label: "openid", value: user.openId, mono: true },
-    { label: "unionid", value: user.unionId, mono: true },
     { label: "注册时间", value: formatDateTime(user.createdAt) },
     { label: "当前订阅状态", value: subStatusText(user.subscriptionStatus) },
     { label: "订阅到期时间", value: user.subscriptionExpireAt ? formatDateTime(user.subscriptionExpireAt) : "-" },
